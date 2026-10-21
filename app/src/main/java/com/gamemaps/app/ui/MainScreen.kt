@@ -46,8 +46,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.gamemaps.app.AppViewModel
-import com.gamemaps.app.map.MarkerIcons
+import com.gamemaps.app.map.GameFonts
 import com.gamemaps.app.model.ViewMode
+import com.gamemaps.app.style.Fx
+import com.gamemaps.app.style.HudKind
 import kotlinx.coroutines.delay
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
@@ -91,10 +93,11 @@ fun GameMapsApp(vm: AppViewModel) {
         CompositionLocalProvider(LocalGame provides g) {
             BoxWithConstraints(Modifier.fillMaxSize().background(Color(g.uiBg))) {
                 val radar = vm.viewMode == ViewMode.RADAR
-                val diameter = minOf(maxWidth, maxHeight) * 0.9f
-                val shiftY = (-36).dp
+                val diameter = minOf(maxWidth * 0.86f, maxHeight * 0.5f)
+                val shiftY = -(maxHeight * 0.05f)
+                val hudOn = vm.settings.gameHud
 
-                if (radar) RadarBackdrop(Modifier.fillMaxSize())
+                if (radar) RadarBackdrop(g, Modifier.fillMaxSize())
 
                 MapHost(
                     vm,
@@ -103,19 +106,27 @@ fun GameMapsApp(vm: AppViewModel) {
                 )
 
                 if (radar) {
+                    if (Fx.SWEEP in g.fx && vm.settings.effects) {
+                        RadarSweep(Color(g.uiAccent), Modifier.align(Alignment.Center).offset(y = shiftY).size(diameter).clip(CircleShape))
+                    }
                     RadarRing(vm.cameraBearing, Modifier.align(Alignment.Center).offset(y = shiftY).size(diameter))
-                    if (vm.settings.showBars) {
+                    val ownBars = hudOn && g.hud in setOf(HudKind.SA, HudKind.PIP, HudKind.BLOCK, HudKind.RACER)
+                    if (vm.settings.showBars && !ownBars) {
                         RadarBars(
                             vm,
                             Modifier
                                 .align(Alignment.Center)
-                                .offset(y = shiftY + diameter / 2 + 26.dp)
+                                .offset(y = shiftY + diameter / 2 + 24.dp)
                                 .width(diameter * 0.78f)
                         )
                     }
                 }
 
+                if (vm.settings.effects) MapOverlays(g, vm.forceNight)
+
                 Hud(vm, onRequestPermission = { launcher.launch(perms) })
+
+                BannerOverlay(vm)
 
                 if (vm.searchOpen) SearchOverlay(vm)
                 if (vm.menuOpen) PauseMenu(vm)
@@ -152,29 +163,12 @@ fun MapHost(vm: AppViewModel, modifier: Modifier) {
     AndroidView(factory = { mapView }, modifier = modifier)
 }
 
-/** Фон вокруг круглого радара: лёгкая сетка в цвет стиля. */
-@Composable
-fun RadarBackdrop(modifier: Modifier) {
-    val g = LocalGame.current
-    Canvas(modifier) {
-        val step = 32.dp.toPx()
-        val c = Color(g.uiAccent).copy(alpha = 0.07f)
-        var x = 0f
-        while (x < size.width) {
-            drawLine(c, Offset(x, 0f), Offset(x, size.height), 1f); x += step
-        }
-        var y = 0f
-        while (y < size.height) {
-            drawLine(c, Offset(0f, y), Offset(size.width, y), 1f); y += step
-        }
-    }
-}
-
 /** Кольцо радара с маркером севера, который вращается вместе с картой. */
 @Composable
 fun RadarRing(bearing: Float, modifier: Modifier) {
     val g = LocalGame.current
-    val tf = remember(g.id) { MarkerIcons.typeface(g) }
+    val ctx = LocalContext.current
+    val tf = remember(g.id) { GameFonts.title(ctx, g) }
     Canvas(modifier) {
         val r = size.minDimension / 2f
         val ringW = g.ringWidth.dp.toPx()

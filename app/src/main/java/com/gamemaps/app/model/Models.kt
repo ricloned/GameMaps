@@ -28,7 +28,7 @@ enum class PoiCategory(val title: String, val glyph: String, val color: Int, val
     GROCERY("Продукты", "24", 0xFF3FA34D.toInt(), listOf(
         "[\"shop\"~\"^(supermarket|convenience|grocery|greengrocer|bakery|butcher|alcohol|beverages|deli|dairy|pastry|confectionery|seafood|frozen_food)\$\"]",
         "[\"amenity\"=\"marketplace\"]")),
-    MALL("Торговые центры", "M", 0xFFE0B020.toInt(), listOf("[\"shop\"~\"^(mall|department_store)\$\"]")),
+    MALL("Торговые центры", "ТЦ", 0xFFE0B020.toInt(), listOf("[\"shop\"~\"^(mall|department_store)\$\"]")),
     CLOTHES("Одежда и обувь", "T", 0xFF9C4FD6.toInt(), listOf("[\"shop\"~\"^(clothes|shoes|fashion|boutique|bag|jewelry|fabric|sports|tailor)\$\"]")),
     ELECTRONICS("Электроника", "E", 0xFF2E86DE.toInt(), listOf("[\"shop\"~\"^(electronics|mobile_phone|computer|hifi|appliance|video_games)\$\"]")),
     SHOP("Другие магазины", "S", 0xFF8E8E8E.toInt(), listOf("[\"shop\"]")),
@@ -41,7 +41,8 @@ enum class PoiCategory(val title: String, val glyph: String, val color: Int, val
     HOSPITAL("Больницы", "H", 0xFFE53935.toInt(), listOf("[\"amenity\"~\"^(hospital|clinic|doctors)\$\"]")),
     BANK("Банки и банкоматы", "\$", 0xFF2EAD5B.toInt(), listOf("[\"amenity\"~\"^(bank|atm|bureau_de_change)\$\"]")),
     POLICE("Полиция", "★", 0xFF2B4FD9.toInt(), listOf("[\"amenity\"=\"police\"]")),
-    GYM("Спортзалы", "W", 0xFFFF8F1F.toInt(), listOf("[\"leisure\"=\"fitness_centre\"]"));
+    GYM("Спортзалы", "W", 0xFFFF8F1F.toInt(), listOf("[\"leisure\"=\"fitness_centre\"]")),
+    TRANSIT("Метро и вокзалы", "M", 0xFFD32F2F.toInt(), listOf("[\"railway\"~\"^(station|halt)\$\"]", "[\"station\"=\"subway\"]"));
 
     companion object {
         private val GROCERY_SHOPS = setOf(
@@ -66,6 +67,7 @@ enum class PoiCategory(val title: String, val glyph: String, val color: Int, val
                 "marketplace" -> return GROCERY
             }
             if (tags["leisure"] == "fitness_centre") return GYM
+            if (tags["railway"] == "station" || tags["railway"] == "halt" || tags["station"] == "subway") return TRANSIT
             val shop = tags["shop"] ?: return null
             return when (shop) {
                 in GROCERY_SHOPS -> GROCERY
@@ -157,7 +159,10 @@ data class Settings(
     val keepScreenOn: Boolean = true,
     val showClock: Boolean = true,
     val showZone: Boolean = true,
-    val showBars: Boolean = true
+    val showBars: Boolean = true,
+    val trail: Boolean = true,
+    val effects: Boolean = true,
+    val gameHud: Boolean = true
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("styleId", styleId).put("labels", labels).put("labelLang", labelLang)
@@ -167,6 +172,7 @@ data class Settings(
         .put("profile", profile.name).put("headingUp", headingUp).put("tilt3d", tilt3d)
         .put("keepScreenOn", keepScreenOn).put("showClock", showClock)
         .put("showZone", showZone).put("showBars", showBars)
+        .put("trail", trail).put("effects", effects).put("gameHud", gameHud)
 
     companion object {
         fun fromJson(o: JSONObject): Settings {
@@ -188,8 +194,124 @@ data class Settings(
                 keepScreenOn = o.optBoolean("keepScreenOn", d.keepScreenOn),
                 showClock = o.optBoolean("showClock", d.showClock),
                 showZone = o.optBoolean("showZone", d.showZone),
-                showBars = o.optBoolean("showBars", d.showBars)
+                showBars = o.optBoolean("showBars", d.showBars),
+                trail = o.optBoolean("trail", d.trail),
+                effects = o.optBoolean("effects", d.effects),
+                gameHud = o.optBoolean("gameHud", d.gameHud)
             )
         }
     }
+}
+
+/** Сопоставление POI из векторных тайлов (схема OpenMapTiles) с категориями. */
+object TileCats {
+    val bySubclass: Map<PoiCategory, List<String>> = linkedMapOf(
+        PoiCategory.GROCERY to listOf("supermarket", "convenience", "grocery", "greengrocer", "bakery", "butcher",
+            "alcohol", "beverages", "deli", "dairy", "pastry", "confectionery", "seafood", "frozen_food",
+            "marketplace", "cheese", "wine", "tea", "coffee", "farm"),
+        PoiCategory.MALL to listOf("mall", "department_store"),
+        PoiCategory.CLOTHES to listOf("clothes", "shoes", "fashion", "boutique", "bag", "jewelry", "fabric",
+            "sports", "tailor", "fashion_accessories", "watches"),
+        PoiCategory.ELECTRONICS to listOf("electronics", "mobile_phone", "computer", "hifi", "appliance", "video_games", "camera"),
+        PoiCategory.CAR to listOf("car", "car_repair", "car_parts", "tyres", "motorcycle", "car_wash"),
+        PoiCategory.FOOD to listOf("restaurant", "fast_food", "food_court"),
+        PoiCategory.CAFE to listOf("cafe", "ice_cream"),
+        PoiCategory.BAR to listOf("bar", "pub", "biergarten", "nightclub"),
+        PoiCategory.FUEL to listOf("fuel", "charging_station"),
+        PoiCategory.PHARMACY to listOf("pharmacy", "chemist"),
+        PoiCategory.HOSPITAL to listOf("hospital", "clinic", "doctors", "dentist"),
+        PoiCategory.BANK to listOf("bank", "atm", "bureau_de_change"),
+        PoiCategory.POLICE to listOf("police"),
+        PoiCategory.GYM to listOf("fitness_centre", "sports_centre"),
+        PoiCategory.TRANSIT to listOf("station", "subway", "halt")
+    )
+    val byClass: Map<PoiCategory, List<String>> = linkedMapOf(
+        PoiCategory.GROCERY to listOf("grocery", "alcohol_shop", "bakery"),
+        PoiCategory.CLOTHES to listOf("clothing_store", "jewelry"),
+        PoiCategory.ELECTRONICS to listOf("mobile_phone"),
+        PoiCategory.CAR to listOf("car"),
+        PoiCategory.FOOD to listOf("restaurant", "fast_food"),
+        PoiCategory.CAFE to listOf("cafe", "ice_cream"),
+        PoiCategory.BAR to listOf("bar", "beer"),
+        PoiCategory.FUEL to listOf("fuel"),
+        PoiCategory.PHARMACY to listOf("pharmacy"),
+        PoiCategory.HOSPITAL to listOf("hospital", "doctor", "dentist"),
+        PoiCategory.BANK to listOf("bank", "atm"),
+        PoiCategory.POLICE to listOf("police"),
+        PoiCategory.TRANSIT to listOf("railway"),
+        PoiCategory.SHOP to listOf("shop", "furniture", "gift", "hardware", "florist", "beauty", "hairdresser",
+            "optician", "toys", "music", "books", "garden", "stationery", "bicycle", "laundry", "pet", "doityourself")
+    )
+
+    /** Классы, которые считаем «популярными местами» и подписываем названиями. */
+    val landmarks: Map<String, String> = linkedMapOf(
+        "attraction" to "Достопримечательность", "museum" to "Музей", "theatre" to "Театр", "castle" to "Замок",
+        "monument" to "Памятник", "stadium" to "Стадион", "college" to "Учебное заведение",
+        "place_of_worship" to "Храм", "town_hall" to "Администрация", "zoo" to "Зоопарк", "cinema" to "Кинотеатр",
+        "art_gallery" to "Галерея", "library" to "Библиотека", "park" to "Парк", "aquarium" to "Аквариум",
+        "lodging" to "Отель", "embassy" to "Посольство", "post" to "Почта"
+    )
+
+    fun categoryOf(cls: String, subclass: String): PoiCategory? {
+        for ((cat, list) in bySubclass) if (subclass in list) return cat
+        for ((cat, list) in byClass) if (cls in list) return cat
+        return null
+    }
+}
+
+/** Игровая статистика: деньги, пробег, достижения. Хранится локально. */
+data class GameStats(
+    val money: Long = 0,
+    val distance: Double = 0.0,
+    val walk: Double = 0.0,
+    val routesDone: Int = 0,
+    val cheats: Int = 0,
+    val encounters: Int = 0,
+    val achievements: Set<String> = emptySet(),
+    val secret: Boolean = false
+) {
+    val steps: Long get() = (walk / 0.75).toLong()
+    val xp: Long get() = (distance / 10).toLong() + routesDone * 50L + encounters * 10L
+    val level: Int get() = kotlin.math.sqrt(xp / 40.0).toInt() + 1
+    val levelProgress: Float
+        get() {
+            val l = level - 1
+            val from = 40.0 * l * l
+            val to = 40.0 * (l + 1) * (l + 1)
+            return ((xp - from) / (to - from)).toFloat().coerceIn(0f, 1f)
+        }
+
+    fun toJson(): JSONObject = JSONObject().put("money", money).put("distance", distance).put("walk", walk)
+        .put("routesDone", routesDone).put("cheats", cheats).put("encounters", encounters)
+        .put("achievements", JSONArray(achievements.toList())).put("secret", secret)
+
+    companion object {
+        fun fromJson(o: JSONObject): GameStats {
+            val a = o.optJSONArray("achievements")
+            return GameStats(
+                money = o.optLong("money"), distance = o.optDouble("distance", 0.0), walk = o.optDouble("walk", 0.0),
+                routesDone = o.optInt("routesDone"), cheats = o.optInt("cheats"), encounters = o.optInt("encounters"),
+                achievements = if (a == null) emptySet() else (0 until a.length()).map { a.getString(it) }.toSet(),
+                secret = o.optBoolean("secret")
+            )
+        }
+    }
+}
+
+object Achievements {
+    val all: List<Pair<String, String>> = listOf(
+        "m100" to "Первые шаги — пройти 100 м",
+        "km1" to "Разминка — 1 км",
+        "km10" to "Дальнобойщик — 10 км",
+        "km42" to "Марафонец — 42 км",
+        "km100" to "Путешественник — 100 км",
+        "route1" to "Первая миссия — доехать по маршруту",
+        "route10" to "Профи — 10 маршрутов",
+        "rich" to "Миллионер — \$1 000 000",
+        "cheater" to "Читер — ввести чит-код",
+        "secret" to "Знаток кодов — открыть секретный стиль",
+        "encounter" to "Первая встреча — дикий магазин"
+    )
+
+    fun title(id: String): String = all.firstOrNull { it.first == id }?.second?.substringBefore(" —") ?: id
 }

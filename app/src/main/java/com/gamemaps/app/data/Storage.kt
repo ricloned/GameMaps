@@ -1,6 +1,7 @@
 package com.gamemaps.app.data
 
 import android.content.Context
+import com.gamemaps.app.model.GameStats
 import com.gamemaps.app.model.SavedRoute
 import com.gamemaps.app.model.Settings
 import org.json.JSONArray
@@ -31,5 +32,15 @@ class Storage(ctx: Context) {
         val arr = JSONArray()
         list.forEach { arr.put(it.toJson()) }
         sp.edit().putString("routes", arr.toString()).apply()
+    }
+
+    fun loadStats(): GameStats = try {
+        GameStats.fromJson(JSONObject(sp.getString("stats", null) ?: "{}"))
+    } catch (e: Exception) {
+        GameStats()
+    }
+
+    fun saveStats(g: GameStats) {
+        sp.edit().putString("stats", g.toJson().toString()).apply()
     }
 }

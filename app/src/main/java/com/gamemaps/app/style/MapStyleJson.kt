@@ -1,6 +1,8 @@
 package com.gamemaps.app.style
 
+import com.gamemaps.app.model.PoiCategory
 import com.gamemaps.app.model.Settings
+import com.gamemaps.app.model.TileCats
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -83,6 +85,40 @@ object MapStyleJson {
     }
 
     private class Tier(val id: String, val filter: JSONArray, val stops: DoubleArray, val color: Int, val minzoom: Int)
+
+    /** Выражение: подкласс/класс POI из тайлов → имя иконки блипа ("" — не показывать). */
+    private fun tileIconExpr(s: Settings): Any? {
+        val hidden = s.hiddenCats
+        val subPairs = ArrayList<Any>()
+        val seenSub = HashSet<String>()
+        for ((cat, list) in TileCats.bySubclass) {
+            if (cat.name in hidden) continue
+            for (v in list) if (seenSub.add(v)) { subPairs.add(v); subPairs.add("blip_${cat.name}") }
+        }
+        val clsPairs = ArrayList<Any>()
+        val seenCls = HashSet<String>()
+        for ((cat, list) in TileCats.byClass) {
+            if (cat.name in hidden) continue
+            for (v in list) if (seenCls.add(v)) { clsPairs.add(v); clsPairs.add("blip_${cat.name}") }
+        }
+        if (subPairs.isEmpty() && clsPairs.isEmpty()) return null
+        val clsExpr: Any = if (clsPairs.isEmpty()) "" else {
+            val m = JSONArray()
+            m.put("match"); m.put(a("coalesce", a("get", "class"), ""))
+            clsPairs.forEach { m.put(it) }
+            m.put("")
+            m
+        }
+        if (subPairs.isEmpty()) return clsExpr
+        val m = JSONArray()
+        m.put("match"); m.put(a("coalesce", a("get", "subclass"), ""))
+        subPairs.forEach { m.put(it) }
+        m.put(clsExpr)
+        return m
+    }
+
+    @Suppress("unused")
+    private val allCats = PoiCategory.entries
 
     fun build(g: GameStyle, s: Settings): String {
         val layers = JSONArray()
@@ -196,7 +232,62 @@ object MapStyleJson {
                 paint = o("text-color" to css(g.label), "text-halo-color" to css(g.labelHalo), "text-halo-width" to 2.0)))
         }
 
+        // --- Магазины и заведения прямо из векторных тайлов ---
+        val iconExpr = tileIconExpr(s)
+        if (s.poiEnabled && iconExpr != null) {
+            val tileLayout = o(
+                "icon-image" to iconExpr,
+                "icon-size" to s.blipScale.toDouble(),
+                "icon-allow-overlap" to false,
+                "icon-padding" to 2,
+                "symbol-sort-key" to a("coalesce", a("get", "rank"), 99)
+            )
+            if (s.poiNames) {
+                tileLayout.put("text-field", a("step", a("zoom"), "", 16, name))
+                tileLayout.put("text-font", bold)
+                tileLayout.put("text-size", 10)
+                tileLayout.put("text-offset", a(0, 1.4))
+                tileLayout.put("text-anchor", "top")
+                tileLayout.put("text-optional", true)
+                tileLayout.put("text-max-width", 8)
+            }
+            layers.put(layer("poi-tiles", "symbol", "poi", minzoom = 14,
+                filter = a("!=", iconExpr, ""),
+                layout = tileLayout,
+                paint = o("text-color" to css(g.label), "text-halo-color" to css(g.labelHalo), "text-halo-width" to 1.2)))
+        }
+
+        // --- Популярные места: музеи, театры, стадионы, храмы, парки, отели ---
+        layers.put(layer("poi-landmark", "symbol", "poi", minzoom = 13,
+            filter = a("match", a("coalesce", a("get", "class"), ""), JSONArray(TileCats.landmarks.keys.toList()), true, false),
+            layout = o(
+                "icon-image" to "landmark",
+                "icon-size" to 0.9,
+                "icon-allow-overlap" to false,
+                "text-field" to name,
+                "text-font" to bold,
+                "text-size" to a("interpolate", a("linear"), a("zoom"), 13, 10, 18, 13),
+                "text-offset" to a(0, 1.1),
+                "text-anchor" to "top",
+                "text-max-width" to 9,
+                "text-optional" to true,
+                "symbol-sort-key" to a("coalesce", a("get", "rank"), 99)
+            ),
+            paint = o("text-color" to css(g.landmark), "text-halo-color" to css(g.labelHalo), "text-halo-width" to 1.6)))
+
+        if (s.labels) {
+            layers.put(layer("housenumber", "symbol", "housenumber", minzoom = 17,
+                layout = o("text-field" to a("get", "housenumber"), "text-font" to a("Noto Sans Regular"), "text-size" to 10),
+                paint = o("text-color" to css(g.label), "text-opacity" to 0.55, "text-halo-color" to css(g.labelHalo), "text-halo-width" to 1.0)))
+        }
+
         // --- Динамические слои приложения ---
+        val trailColor = g.trailColor
+        if (s.trail && trailColor != null) {
+            val trailPaint = o("line-color" to css(trailColor), "line-width" to zoomLin(10, 2, 18, 6))
+            if (g.trailDashed) trailPaint.put("line-dasharray", a(0.6, 1.6))
+            layers.put(layer("trail", "line", source = "trail", paint = trailPaint, layout = lineLayout()))
+        }
         layers.put(layer("route-casing", "line", source = "route",
             paint = o("line-color" to css(g.routeCasing), "line-width" to zoomLin(10, 7, 18, 16)),
             layout = lineLayout()))
@@ -248,6 +339,8 @@ object MapStyleJson {
             )))
         layers.put(layer("player-glow", "circle", source = "player",
             paint = o("circle-radius" to 20, "circle-color" to css(g.player), "circle-opacity" to 0.18, "circle-pitch-alignment" to "map")))
+        layers.put(layer("player-dot", "circle", source = "player",
+            paint = o("circle-radius" to 7, "circle-color" to css(g.player), "circle-stroke-color" to css(g.playerLine), "circle-stroke-width" to 2.5)))
         layers.put(layer("player", "symbol", source = "player",
             layout = o(
                 "icon-image" to "player",
@@ -261,7 +354,7 @@ object MapStyleJson {
         // --- Источники ---
         val sources = JSONObject()
         sources.put("omt", o("type" to "vector", "url" to TILES))
-        for (id in listOf("route", "draft", "dest", "pois", "player")) {
+        for (id in listOf("route", "draft", "dest", "pois", "player", "trail")) {
             sources.put(id, o("type" to "geojson", "data" to JSONObject(EMPTY_FC)))
         }
 

@@ -42,6 +42,7 @@ import com.gamemaps.app.AppViewModel
 import com.gamemaps.app.NavState
 import com.gamemaps.app.model.RouteResult
 import com.gamemaps.app.model.ViewMode
+import com.gamemaps.app.style.HudKind
 import com.gamemaps.app.nav.Geo
 import kotlinx.coroutines.delay
 import java.time.LocalTime
@@ -54,6 +55,7 @@ private val HHMM = DateTimeFormatter.ofPattern("HH:mm")
 fun BoxScope.Hud(vm: AppViewModel, onRequestPermission: () -> Unit) {
     val g = LocalGame.current
     val radar = vm.viewMode == ViewMode.RADAR
+    val hudOn = vm.settings.gameHud
     Box(
         Modifier
             .fillMaxSize()
@@ -66,30 +68,25 @@ fun BoxScope.Hud(vm: AppViewModel, onRequestPermission: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val nav = vm.nav
-            if (nav != null) NavBanner(nav) else TopBar(vm)
-            if (vm.routeLoading || vm.poiLoading) {
+            if (nav != null) NavBanner(nav) else TopBar(vm, showClock = vm.settings.showClock && !(hudOn && g.hud == HudKind.SA))
+            if (hudOn && g.hud == HudKind.TACTICAL) {
+                CompassTape(vm.cameraBearing, Color(g.uiText), Color(g.uiAccent))
+            }
+            if (hudOn) GameHudTop(vm, Modifier.align(Alignment.End))
+            if (vm.routeLoading) {
                 GText("Загрузка…", size = 11.sp, color = Color(g.uiDim), shadow = true)
             }
             vm.message?.let { MessageBox(it) }
         }
 
-        // ---- кнопки справа ----
-        Column(
-            Modifier.align(Alignment.CenterEnd).offset(y = (-30).dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            HudButton(Glyph.MENU, { vm.openMenu() })
-            HudButton(if (radar) Glyph.MAP else Glyph.RADAR, { vm.toggleMode() })
-            HudButton(
-                Glyph.LOCATE,
-                { if (vm.hasPermission) vm.locate() else onRequestPermission() },
-                active = vm.following && vm.location != null
-            )
-            val b = vm.cameraBearing
-            val rotated = b > 1f && b < 359f
-            val autoRotating = vm.following && vm.settings.headingUp && (radar || vm.nav != null)
-            if (rotated && !autoRotating) HudButton(Glyph.NORTH, { vm.resetNorth() }, rotation = -b)
-            HudButton(Glyph.ROUTE, { if (vm.editing) vm.closeEditor() else vm.startEditor() }, active = vm.editing)
+        // ---- кнопки справа (в режиме карты) ----
+        if (!radar) {
+            Column(
+                Modifier.align(Alignment.CenterEnd).offset(y = 40.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HudButtons(vm, onRequestPermission)
+            }
         }
 
         // ---- низ ----
@@ -98,6 +95,15 @@ fun BoxScope.Hud(vm: AppViewModel, onRequestPermission: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             ZonePopup(vm)
+            if (hudOn) GameHudBottom(vm)
+            if (radar) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    HudButtons(vm, onRequestPermission)
+                }
+            }
             val sel = vm.selected
             val nav = vm.nav
             val route = vm.activeRoute
@@ -123,7 +129,25 @@ fun BoxScope.Hud(vm: AppViewModel, onRequestPermission: () -> Unit) {
 }
 
 @Composable
-private fun TopBar(vm: AppViewModel) {
+private fun HudButtons(vm: AppViewModel, onRequestPermission: () -> Unit) {
+    val radar = vm.viewMode == ViewMode.RADAR
+    HudButton(Glyph.MENU, { vm.openMenu() })
+    HudButton(if (radar) Glyph.MAP else Glyph.RADAR, { vm.toggleMode() })
+    HudButton(
+        Glyph.LOCATE,
+        { if (vm.hasPermission) vm.locate() else onRequestPermission() },
+        active = vm.following && vm.location != null
+    )
+    val b = vm.cameraBearing
+    val rotated = b > 1f && b < 359f
+    val autoRotating = vm.following && vm.settings.headingUp && (radar || vm.nav != null)
+    if (rotated && !autoRotating) HudButton(Glyph.NORTH, { vm.resetNorth() }, rotation = -b)
+    HudButton(Glyph.SEARCH, { vm.openSearch() })
+    HudButton(Glyph.ROUTE, { if (vm.editing) vm.closeEditor() else vm.startEditor() }, active = vm.editing)
+}
+
+@Composable
+private fun TopBar(vm: AppViewModel, showClock: Boolean) {
     val g = LocalGame.current
     val shape = RoundedCornerShape(g.uiCorner.dp)
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -142,7 +166,7 @@ private fun TopBar(vm: AppViewModel) {
             Spacer(Modifier.width(10.dp))
             GText("Поиск: магазины, адреса", size = 14.sp, color = Color(g.uiDim), weight = FontWeight.Normal, upper = false, maxLines = 1)
         }
-        if (vm.settings.showClock) {
+        if (showClock) {
             Spacer(Modifier.width(12.dp))
             Clock(vm)
         }
@@ -189,7 +213,7 @@ private fun ColumnScope.ZonePopup(vm: AppViewModel) {
         }
     }
     AnimatedVisibility(visible, modifier = Modifier.align(Alignment.End), enter = fadeIn(), exit = fadeOut()) {
-        GText(vm.zoneName ?: "", size = 24.sp, color = Color(g.uiAccent), shadow = true)
+        GText(vm.zoneName ?: "", size = if (g.hud == HudKind.SA) 30.sp else 24.sp, color = Color(g.zoneColor), shadow = true)
     }
 }
 

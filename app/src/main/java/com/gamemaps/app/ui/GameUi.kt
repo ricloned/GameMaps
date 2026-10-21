@@ -38,8 +38,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +52,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.gamemaps.app.map.GameFonts
 import com.gamemaps.app.map.MarkerIcons
 import com.gamemaps.app.model.PoiCategory
 import com.gamemaps.app.style.BlipShape
@@ -60,12 +63,47 @@ import com.gamemaps.app.style.UiFont
 val LocalGame = staticCompositionLocalOf { GameStyles.V }
 
 private val condensedFamily: FontFamily by lazy { FontFamily(Typeface.create("sans-serif-condensed", Typeface.NORMAL)) }
+private val resFamilies = HashMap<Int, FontFamily>()
 
-fun GameStyle.family(): FontFamily = when (uiFont) {
-    UiFont.SANS -> FontFamily.SansSerif
-    UiFont.SERIF -> FontFamily.Serif
-    UiFont.MONO -> FontFamily.Monospace
-    UiFont.CONDENSED -> condensedFamily
+private fun resFamily(res: Int): FontFamily = resFamilies.getOrPut(res) { FontFamily(Font(res)) }
+
+fun GameStyle.family(): FontFamily {
+    val r = uiFontRes
+    if (r != null) return resFamily(r)
+    return when (uiFont) {
+        UiFont.SANS -> FontFamily.SansSerif
+        UiFont.SERIF -> FontFamily.Serif
+        UiFont.MONO -> FontFamily.Monospace
+        UiFont.CONDENSED -> condensedFamily
+    }
+}
+
+/** Шрифт заголовков («MISSION PASSED», деньги и т.п.). */
+fun GameStyle.titleFamily(): FontFamily = titleFontRes?.let { resFamily(it) } ?: family()
+
+/** Текст заголовочным шрифтом стиля, с тенью. */
+@Composable
+fun TitleText(
+    text: String,
+    size: TextUnit,
+    color: Color,
+    modifier: Modifier = Modifier,
+    align: TextAlign? = null,
+    outline: Color = Color.Black
+) {
+    val g = LocalGame.current
+    Text(
+        text = text,
+        modifier = modifier,
+        color = color,
+        textAlign = align,
+        maxLines = 2,
+        style = TextStyle(
+            fontFamily = g.titleFamily(),
+            fontSize = size,
+            shadow = Shadow(outline, Offset(3f, 3f), 4f)
+        )
+    )
 }
 
 @Composable
@@ -301,6 +339,7 @@ fun SectionTitle(text: String) {
 fun BlipImage(cat: PoiCategory, size: Dp) {
     val g = LocalGame.current
     val d = LocalDensity.current.density
-    val bmp = remember(g.id, cat, d) { MarkerIcons.blip(g, cat, d).asImageBitmap() }
+    val ctx = LocalContext.current
+    val bmp = remember(g.id, cat, d) { MarkerIcons.blip(g, cat, d, GameFonts.ui(ctx, g)).asImageBitmap() }
     Image(bitmap = bmp, contentDescription = cat.title, modifier = Modifier.size(size))
 }

@@ -187,6 +187,51 @@ object Api {
         return out
     }
 
+    /** Подробности о месте по названию рядом с точкой: часы, телефон, адрес. */
+    fun details(lat: Double, lon: Double, name: String): Place? {
+        if (name.isBlank()) return null
+        val safe = name.replace("\\", "").replace("\"", "\\\"")
+        val q = "[out:json][timeout:15];nwr(around:80,${f(lat)},${f(lon)})[\"name\"=\"$safe\"];out tags center 3;"
+        val els = JSONObject(overpass(q)).optJSONArray("elements") ?: return null
+        for (i in 0 until els.length()) {
+            val e = els.getJSONObject(i)
+            val t = e.optJSONObject("tags") ?: continue
+            val tags = HashMap<String, String>()
+            t.keys().forEach { k -> tags[k] = t.optString(k) }
+            val street = listOfNotNull(tags["addr:street"], tags["addr:housenumber"]).joinToString(" ")
+            return Place(
+                id = "d",
+                name = name,
+                point = GeoPoint(lat, lon),
+                category = PoiCategory.categorize(tags),
+                address = listOf(street, tags["addr:city"].orEmpty()).filter { it.isNotBlank() }.joinToString(", "),
+                hours = tags["opening_hours"].orEmpty(),
+                phone = tags["phone"] ?: tags["contact:phone"] ?: ""
+            )
+        }
+        return null
+    }
+
+    /** Расстояние до ближайшего отделения полиции в радиусе (или null). */
+    fun policeNear(lat: Double, lon: Double, radius: Int): Double? {
+        val q = "[out:json][timeout:15];nwr[\"amenity\"=\"police\"](around:$radius,${f(lat)},${f(lon)});out center 10;"
+        val els = JSONObject(overpass(q)).optJSONArray("elements") ?: return null
+        var best: Double? = null
+        val me = GeoPoint(lat, lon)
+        for (i in 0 until els.length()) {
+            val e = els.getJSONObject(i)
+            val c = e.optJSONObject("center")
+            val p = when {
+                e.has("lat") -> GeoPoint(e.getDouble("lat"), e.getDouble("lon"))
+                c != null -> GeoPoint(c.getDouble("lat"), c.getDouble("lon"))
+                else -> continue
+            }
+            val d = Geo.dist(me, p)
+            if (best == null || d < best) best = d
+        }
+        return best
+    }
+
     // ---------- Маршруты (OSRM) ----------
 
     fun route(profile: Profile, pts: List<GeoPoint>): RouteResult {

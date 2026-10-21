@@ -14,8 +14,10 @@ import androidx.lifecycle.viewModelScope
 import com.gamemaps.app.data.Storage
 import com.gamemaps.app.location.LocationTracker
 import com.gamemaps.app.map.GeoJson
+import com.gamemaps.app.map.MapHit
 import com.gamemaps.app.map.MapRenderer
-import com.gamemaps.app.model.Box
+import com.gamemaps.app.model.Achievements
+import com.gamemaps.app.model.GameStats
 import com.gamemaps.app.model.GeoPoint
 import com.gamemaps.app.model.Place
 import com.gamemaps.app.model.PoiCategory
@@ -24,15 +26,18 @@ import com.gamemaps.app.model.RoutePoint
 import com.gamemaps.app.model.RouteResult
 import com.gamemaps.app.model.SavedRoute
 import com.gamemaps.app.model.Settings
+import com.gamemaps.app.model.TileCats
 import com.gamemaps.app.model.ViewMode
 import com.gamemaps.app.nav.Geo
 import com.gamemaps.app.net.Api
 import com.gamemaps.app.style.GameStyle
 import com.gamemaps.app.style.GameStyles
+import com.gamemaps.app.style.HudKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.maps.MapLibreMap
@@ -44,8 +49,13 @@ data class NavState(
     val stepIndex: Int = 1,
     val distToStep: Double = 0.0,
     val remaining: Double = route.distance,
-    val remainingTime: Double = route.duration
+    val remainingTime: Double = route.duration,
+    val startedAt: Long = SystemClock.elapsedRealtime()
 )
+
+enum class BannerKind { PASS, WASTED, ACHIEVEMENT, ENCOUNTER }
+
+data class Banner(val kind: BannerKind, val title: String, val sub: String, val id: Long = SystemClock.elapsedRealtimeNanos())
 
 class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listener {
 
@@ -68,6 +78,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
     var heading by mutableFloatStateOf(0f)
         private set
     var cameraBearing by mutableFloatStateOf(0f)
+        private set
+    var metersPerDp by mutableStateOf(1.0)
         private set
     var hasPermission by mutableStateOf(false)
         private set
@@ -104,14 +116,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         private set
     val savedRoutes = mutableStateListOf<SavedRoute>()
 
-    // --- места ---
+    // --- результаты поиска на карте ---
     private val pois = LinkedHashMap<String, Place>()
-    private var poiBox: Box? = null
-    private var poiJob: Job? = null
-    var poiLoading by mutableStateOf(false)
-        private set
 
-    // --- название улицы (как районы в San Andreas) ---
+    // --- название улицы ---
     var zoneName by mutableStateOf<String?>(null)
         private set
     var zoneStamp by mutableIntStateOf(0)
@@ -119,9 +127,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
     private var zoneAt: GeoPoint? = null
     private var zoneTime = 0L
 
+    // --- игровой слой ---
+    var stats by mutableStateOf(storage.loadStats())
+        private set
+    var wanted by mutableIntStateOf(0)
+        private set
+    private var wantedOff = false
+    private var wantedBoostUntil = 0L
+    var banner by mutableStateOf<Banner?>(null)
+    var forceNight by mutableStateOf<Boolean?>(null)
+        private set
+    var nearbyCount by mutableIntStateOf(0)
+        private set
+    private val trail = ArrayList<GeoPoint>()
+    private var lastFix: Location? = null
+    private var moneyCarry = 0.0
+    private var lastStatsSave = 0L
+    private var lastPoliceCheck = 0L
+    private var policeAt: GeoPoint? = null
+    private var lastEncounter = 0L
+    private val seenNames = HashSet<String>()
+    private var lastGpsLostBanner = 0L
+
     init {
         renderer.listener = this
         savedRoutes.addAll(storage.loadRoutes())
+        viewModelScope.launch { gameTicker() }
     }
 
     val canGoBack: Boolean
@@ -147,6 +178,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         renderRoute()
         renderDraft()
         renderDest()
+        renderTrail()
     }
 
     fun updateSettings(f: (Settings) -> Settings) {
@@ -156,6 +188,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         storage.saveSettings(n)
         renderer.apply(style, n)
         renderPois()
+    }
+
+    fun selectStyle(id: String) {
+        updateSettings { it.copy(styleId = id) }
+        if (viewMode == ViewMode.RADAR) followCamera(force = true)
     }
 
     fun toggleCat(cat: PoiCategory) = updateSettings {
@@ -197,20 +234,78 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         cameraBearing = bearing
     }
 
+    override fun onCameraIdle() {
+        renderer.metersPerDp()?.let { metersPerDp = it }
+    }
+
     override fun onUserGesture() {
         following = false
     }
 
-    override fun onTap(lat: Double, lon: Double, poiId: String?) {
+    override fun onTap(lat: Double, lon: Double, hit: MapHit?) {
         if (editing) {
-            addDraftPoint(lat, lon, poiId?.let { pois[it]?.name })
+            val label = hit?.props?.optString("name")?.takeIf { it.isNotBlank() }
+            addDraftPoint(hit?.lat ?: lat, hit?.lon ?: lon, label)
             return
         }
-        if (poiId != null) {
-            pois[poiId]?.let { select(it, fly = false) }
-            return
+        if (hit != null) {
+            val p = placeFromHit(hit)
+            if (p != null) {
+                select(p, fly = false)
+                if (hit.layer != "poi-blips") enrich(p)
+                return
+            }
         }
         if (selected != null) clearSelection()
+    }
+
+    private fun localName(props: org.json.JSONObject): String {
+        val base = props.optString("name")
+        return when (settings.labelLang) {
+            "ru" -> props.optString("name:ru").ifBlank { base }
+            "en" -> props.optString("name:en").ifBlank { props.optString("name_en").ifBlank { base } }
+            else -> base
+        }
+    }
+
+    private fun placeFromHit(hit: MapHit): Place? {
+        if (hit.layer == "poi-blips") return pois[hit.props.optString("pid")]
+        val cls = hit.props.optString("class")
+        val sub = hit.props.optString("subclass")
+        val landmark = TileCats.landmarks[cls]
+        val cat = if (landmark != null) null else TileCats.categoryOf(cls, sub)
+        val title = cat?.title ?: landmark ?: "Место"
+        val name = localName(hit.props).ifBlank { title }
+        val subTxt = sub.replace('_', ' ').takeIf { it.isNotBlank() && it != cls }
+        return Place(
+            id = "t_${cls}_${hit.lat}_${hit.lon}",
+            name = name,
+            point = GeoPoint(hit.lat, hit.lon),
+            category = cat,
+            kind = listOfNotNull(title, subTxt).joinToString(" · ")
+        )
+    }
+
+    /** Догружаем адрес, часы работы и телефон для места, по которому тапнули. */
+    private fun enrich(p: Place) {
+        viewModelScope.launch {
+            val d = runCatching { withContext(Dispatchers.IO) { Api.details(p.point.lat, p.point.lon, p.name) } }.getOrNull()
+            var cur = selected ?: return@launch
+            if (cur.id != p.id) return@launch
+            if (d != null) {
+                cur = cur.copy(
+                    address = d.address.ifBlank { cur.address },
+                    hours = d.hours.ifBlank { cur.hours },
+                    phone = d.phone.ifBlank { cur.phone }
+                )
+                selected = cur
+            }
+            if (cur.address.isBlank()) {
+                val r = runCatching { withContext(Dispatchers.IO) { Api.reverse(p.point.lat, p.point.lon) } }.getOrNull()
+                val now = selected
+                if (r != null && now != null && now.id == p.id) selected = now.copy(address = r.label)
+            }
+        }
     }
 
     override fun onLongPress(lat: Double, lon: Double) {
@@ -218,14 +313,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
             addDraftPoint(lat, lon, null)
             return
         }
-        val p = Place(id = "wp", name = "Метка", point = GeoPoint(lat, lon), kind = "Своя точка")
+        val p = Place(id = "wp_${lat}_$lon", name = "Метка", point = GeoPoint(lat, lon), kind = "Своя точка")
         select(p, fly = false)
         viewModelScope.launch {
             val r = runCatching { withContext(Dispatchers.IO) { Api.reverse(lat, lon) } }.getOrNull()
             val cur = selected
-            if (r != null && cur != null && cur.id == "wp" && cur.point == p.point) {
-                selected = cur.copy(address = r.label)
-            }
+            if (r != null && cur != null && cur.id == p.id) selected = cur.copy(address = r.label)
         }
     }
 
@@ -240,10 +333,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         if (hasPermission) tracker.start()
     }
 
-    fun stopTracking() = tracker.stop()
+    fun stopTracking() {
+        tracker.stop()
+        storage.saveStats(stats)
+    }
 
     override fun onCleared() {
         tracker.stop()
+        storage.saveStats(stats)
         super.onCleared()
     }
 
@@ -258,6 +355,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         if (following) followCamera(force = first, zoom = if (first) 16.0 else null)
         if (nav != null) updateNav(l)
         checkZone(l)
+        trackProgress(l)
     }
 
     private var lastHeadingPush = 0L
@@ -294,7 +392,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
             else -> null
         }
         val tilt: Double? = when {
-            (radar || navOn) && settings.tilt3d -> 50.0
+            (radar || navOn) && settings.tilt3d && style.radarTilt -> 50.0
             radar || navOn -> 0.0
             else -> null
         }
@@ -327,38 +425,181 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         }
     }
 
-    // ================= Места =================
+    // ================= Игровой слой =================
 
-    override fun onCameraIdle() {
-        val (box, zoom) = renderer.viewport() ?: return
-        if (!settings.poiEnabled || zoom < 14.0) return
-        if (poiBox?.contains(box) == true) return
-        poiJob?.cancel()
-        poiJob = viewModelScope.launch {
-            delay(500)
-            poiLoading = true
-            try {
-                val big = box.expand(0.3)
-                val list = withContext(Dispatchers.IO) { Api.poisInBox(big) }
-                if (pois.size > 5000) pois.clear()
-                list.forEach { pois[it.id] = it }
-                poiBox = big
-                renderPois()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                message = "Места не загрузились (${e.message}). Подвинь карту ещё раз."
-            } finally {
-                poiLoading = false
+    /** Пробег, деньги, шаги, след и достижения. */
+    private fun trackProgress(l: Location) {
+        val prev = lastFix
+        if (l.hasAccuracy() && l.accuracy > 40f) return
+        lastFix = l
+        if (prev == null) return
+        val d = Geo.dist(GeoPoint(prev.latitude, prev.longitude), GeoPoint(l.latitude, l.longitude))
+        if (d < 2.0 || d > 300.0) return
+        val walking = !l.hasSpeed() || l.speed < 2.5f
+        moneyCarry += d / 10.0
+        val earned = moneyCarry.toLong()
+        moneyCarry -= earned
+        stats = stats.copy(
+            money = stats.money + earned,
+            distance = stats.distance + d,
+            walk = if (walking) stats.walk + d else stats.walk
+        )
+        // след
+        val me = GeoPoint(l.latitude, l.longitude)
+        if (trail.isEmpty() || Geo.dist(trail.last(), me) > 5) {
+            trail.add(me)
+            if (trail.size > 3000) trail.subList(0, 500).clear()
+            renderTrail()
+        }
+        val km = stats.distance / 1000
+        if (stats.distance >= 100) unlock("m100")
+        if (km >= 1) unlock("km1")
+        if (km >= 10) unlock("km10")
+        if (km >= 42.2) unlock("km42")
+        if (km >= 100) unlock("km100")
+        if (stats.money >= 1_000_000) unlock("rich")
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastStatsSave > 30_000) {
+            lastStatsSave = now
+            storage.saveStats(stats)
+        }
+    }
+
+    private fun renderTrail() {
+        renderer.set("trail", if (trail.size < 2) GeoJson.EMPTY else GeoJson.fc(listOf(GeoJson.line(trail))))
+    }
+
+    fun clearTrail() {
+        trail.clear()
+        renderTrail()
+        message = "След очищен"
+    }
+
+    private fun unlock(id: String) {
+        if (id in stats.achievements) return
+        stats = stats.copy(achievements = stats.achievements + id)
+        storage.saveStats(stats)
+        banner = Banner(BannerKind.ACHIEVEMENT, "Достижение получено!", Achievements.title(id))
+    }
+
+    private fun addMoney(v: Long) {
+        stats = stats.copy(money = (stats.money + v).coerceAtLeast(0))
+        if (stats.money >= 1_000_000) unlock("rich")
+        storage.saveStats(stats)
+    }
+
+    private fun wasted(sub: String) {
+        val g = style
+        banner = Banner(BannerKind.WASTED, g.wastedTitle, sub)
+    }
+
+    /** Фоновый цикл: розыск у полиции, «встречи» с магазинами, потеря GPS. */
+    private suspend fun gameTicker() {
+        while (viewModelScope.isActive) {
+            delay(5000)
+            val l = location ?: continue
+            val now = SystemClock.elapsedRealtime()
+            val me = GeoPoint(l.latitude, l.longitude)
+
+            // потеря GPS → «WASTED»
+            val age = (SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000L
+            if (hasPermission && age > 45_000 && now - lastGpsLostBanner > 10 * 60_000) {
+                lastGpsLostBanner = now
+                wasted("Сигнал GPS потерян")
+            }
+
+            // розыск: чем ближе отделение полиции, тем больше звёзд
+            if (wantedOff) {
+                wanted = 0
+            } else if (now < wantedBoostUntil) {
+                wanted = maxOf(wanted, 4)
+            } else {
+                val pa = policeAt
+                if (now - lastPoliceCheck > 60_000 && (pa == null || Geo.dist(pa, me) > 120)) {
+                    lastPoliceCheck = now
+                    policeAt = me
+                    val d = runCatching { withContext(Dispatchers.IO) { Api.policeNear(me.lat, me.lon, 400) } }.getOrNull()
+                    wanted = when {
+                        d == null -> 0
+                        d < 100 -> 3
+                        d < 220 -> 2
+                        else -> 1
+                    }
+                } else if (pa != null && Geo.dist(pa, me) > 500) {
+                    wanted = 0
+                }
+            }
+
+            // «встречи» и профайлер: магазины рядом с игроком
+            val hud = style.hud
+            if (hud == HudKind.POCKET || hud == HudKind.HACKER) {
+                val near = renderer.tilePoisNear(me.lat, me.lon, 45.0)
+                nearbyCount = near.size
+                if (now - lastEncounter > 45_000) {
+                    val fresh = near.map { localName(it.props) }.firstOrNull { it.isNotBlank() && it !in seenNames }
+                    if (fresh != null) {
+                        lastEncounter = now
+                        seenNames.add(fresh)
+                        stats = stats.copy(encounters = stats.encounters + 1)
+                        unlock("encounter")
+                        banner = if (hud == HudKind.POCKET)
+                            Banner(BannerKind.ENCOUNTER, "Дикий «$fresh» появился!", "Что будешь делать? ▶ПРОЙТИ МИМО")
+                        else
+                            Banner(BannerKind.ENCOUNTER, "ПРОФАЙЛЕР: $fresh", "Wi-Fi найден · уязвимостей: ${1 + fresh.length % 4}")
+                    }
+                }
             }
         }
     }
 
-    private fun renderPois() {
-        if (!settings.poiEnabled) {
-            renderer.set("pois", GeoJson.EMPTY)
-            return
+    /** Чит-коды из игр (вводятся в строку поиска). Возвращает true, если код сработал. */
+    private fun tryCheat(raw: String): Boolean {
+        val up = raw.trim().uppercase().replace(" ", "")
+        val low = raw.trim().lowercase()
+        val text: String = when (up) {
+            "HESOYAM" -> { addMoney(250_000); "Здоровье, броня и \$250 000" }
+            "AEZAKMI", "LEAVEMEALONE" -> { wantedOff = true; wanted = 0; "Розыск больше не грозит" }
+            "ASNAEB" -> { wantedOff = false; wantedBoostUntil = 0; wanted = 0; "Розыск сброшен" }
+            "OSRBLHH", "BRINGITON" -> { wantedOff = false; wantedBoostUntil = SystemClock.elapsedRealtime() + 120_000; wanted = 4; "Полиция в бешенстве на 2 минуты" }
+            "BAGUVIX" -> "Бесконечное здоровье"
+            "YECGAA" -> "Джетпак выдан. Смотри в небо"
+            "PANZER", "AIWPRTON" -> "Танк уже едет к тебе"
+            "IDDQD" -> "Режим бога включён"
+            "IDKFA" -> "Все ключи и оружие"
+            "ROSEBUD" -> { addMoney(1_000); "+1 000 симолеонов" }
+            "MOTHERLODE" -> { addMoney(50_000); "+50 000 симолеонов" }
+            "SZCMAWO" -> { wasted("Чит-код"); "Ну ты сам попросил" }
+            "GROVESTREET", "SANANDREAS" -> { selectStyle("sa"); "Grove Street. Home." }
+            "LOSSANTOS" -> { selectStyle("v"); "Добро пожаловать в Лос-Сантос" }
+            "VICECITY" -> { selectStyle("vice"); "Добро пожаловать в 1986-й" }
+            "REDPILL" -> { selectStyle("matrix"); "Добро пожаловать в реальный мир" }
+            "BLUEPILL" -> { selectStyle("v"); "Ты проснёшься в своей кровати" }
+            "WARNEVERCHANGES" -> { selectStyle("pip"); "War. War never changes." }
+            "UUDDLRLRBA", "KONAMI", "↑↑↓↓←→←→BA" -> {
+                stats = stats.copy(secret = true)
+                unlock("secret")
+                selectStyle("vapor")
+                "Секретный стиль открыт"
+            }
+            else -> when (low) {
+                "/time set night" -> { forceNight = true; "Время установлено: ночь" }
+                "/time set day" -> { forceNight = false; "Время установлено: день" }
+                "/time reset" -> { forceNight = null; "Время снова реальное" }
+                "/gamemode creative" -> "Творческий режим. Летать всё равно нельзя"
+                "/kill" -> { wasted("/kill"); "Игрок погиб" }
+                else -> return false
+            }
         }
+        stats = stats.copy(cheats = stats.cheats + 1)
+        storage.saveStats(stats)
+        unlock("cheater")
+        message = "ЧИТ-КОД АКТИВИРОВАН · $text"
+        return true
+    }
+
+    // ================= Места из поиска =================
+
+    private fun renderPois() {
         val hidden = settings.hiddenCats
         val feats = pois.values.mapNotNull { p ->
             val cat = p.category ?: return@mapNotNull null
@@ -370,7 +611,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
 
     private fun select(p: Place, fly: Boolean) {
         selected = p
-        following = following && !fly
+        if (fly) following = false
         renderDest()
         if (fly) renderer.moveTo(p.point.lat, p.point.lon, 16.5, null, null, 900)
     }
@@ -416,8 +657,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
             searching = false
             return
         }
+        if (tryCheat(q)) {
+            query = ""
+            results = emptyList()
+            searchOpen = false
+            return
+        }
         searchJob = viewModelScope.launch {
-            delay(400)
+            delay(450)
             searching = true
             try {
                 val c = myPointOrCenter()
@@ -442,8 +689,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
             searching = true
             try {
                 val list = withContext(Dispatchers.IO) { Api.nearby(cat, c.lat, c.lon, 3000) }
-                list.forEach { pois[it.id] = it }
-                renderPois()
                 results = list.sortedBy { Geo.dist(c, it.point) }.take(80)
             } catch (e: CancellationException) {
                 throw e
@@ -461,7 +706,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
             pois[p.id] = p
             renderPois()
         }
-        following = false
         select(p, fly = true)
     }
 
@@ -504,7 +748,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
 
     fun startNavigation() {
         val r = activeRoute ?: return
-        nav = NavState(r, activeTargets)
+        val prev = nav
+        nav = NavState(r, activeTargets, startedAt = prev?.startedAt ?: SystemClock.elapsedRealtime())
         offCount = 0
         selected = null
         following = true
@@ -525,6 +770,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         }
     }
 
+    private fun onArrived(n: NavState) {
+        val reward = 500L + (n.route.distance / 2).toLong()
+        addMoney(reward)
+        stats = stats.copy(routesDone = stats.routesDone + 1)
+        storage.saveStats(stats)
+        val g = style
+        val secs = (SystemClock.elapsedRealtime() - n.startedAt) / 1000
+        val sub = when (g.hud) {
+            HudKind.RACER -> "Время ${secs / 60}:${String.format("%02d", secs % 60)} · +${g.moneyPrefix}$reward"
+            else -> "${g.passSub} ${g.moneyPrefix}$reward".trim()
+        }
+        banner = Banner(BannerKind.PASS, g.passTitle, sub)
+        if (stats.routesDone >= 1) unlock("route1")
+        if (stats.routesDone >= 10) unlock("route10")
+    }
+
     private fun renderRoute() {
         val r = activeRoute
         renderer.set("route", if (r == null) GeoJson.EMPTY else GeoJson.fc(listOf(GeoJson.line(r.points))))
@@ -536,7 +797,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         val targets = n.targets.toMutableList()
         if (targets.isNotEmpty() && Geo.dist(me, targets.last()) < 30) {
             stopRoute()
-            message = "Вы на месте!"
+            onArrived(n)
             return
         }
         if (targets.size > 1 && Geo.dist(me, targets.first()) < 40) targets.removeAt(0)

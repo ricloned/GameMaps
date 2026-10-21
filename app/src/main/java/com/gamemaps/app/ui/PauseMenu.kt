@@ -45,8 +45,11 @@ import com.gamemaps.app.model.Profile
 import com.gamemaps.app.nav.Geo
 import com.gamemaps.app.style.GameStyle
 import com.gamemaps.app.style.GameStyles
+import com.gamemaps.app.style.StyleGroup
+import com.gamemaps.app.model.Achievements
+import java.util.Locale
 
-private val TABS = listOf("Стиль", "Места", "Маршруты", "Настройки")
+private val TABS = listOf("Стиль", "Места", "Маршруты", "Статистика", "Настройки")
 
 /** Меню «паузы» в духе игр: вкладки сверху, всё настраивается на лету. */
 @Composable
@@ -84,6 +87,7 @@ fun PauseMenu(vm: AppViewModel) {
                     0 -> StyleTab(vm)
                     1 -> PlacesTab(vm)
                     2 -> RoutesTab(vm)
+                    3 -> StatsTab(vm)
                     else -> SettingsTab(vm)
                 }
             }
@@ -113,8 +117,13 @@ private fun TabChip(text: String, selected: Boolean, onClick: () -> Unit) {
 private fun StyleTab(vm: AppViewModel) {
     val s = vm.settings
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(GameStyles.all, key = { it.id }) { st ->
-            StyleCard(st, st.id == s.styleId) { vm.updateSettings { it.copy(styleId = st.id) } }
+        for (group in StyleGroup.entries) {
+            val list = GameStyles.all.filter { it.group == group && (!it.hidden || vm.stats.secret) }
+            if (list.isEmpty()) continue
+            item(key = "group_${group.name}") { SectionTitle(group.title) }
+            items(list, key = { it.id }) { st ->
+                StyleCard(st, st.id == s.styleId) { vm.selectStyle(st.id) }
+            }
         }
         item { SectionTitle("Вид карты") }
         item {
@@ -154,7 +163,7 @@ private fun StyleCard(st: GameStyle, selected: Boolean, onClick: () -> Unit) {
             StylePreview(st, Modifier.size(width = 112.dp, height = 84.dp).clip(shape))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                GText(st.name, size = 20.sp, color = Color(st.uiAccent))
+                TitleText(st.name, 22.sp, Color(st.uiAccent), outline = Color.Black.copy(alpha = 0.6f))
                 GText(st.tag, size = 12.sp, color = Color(st.uiText), weight = FontWeight.Normal, upper = false)
                 Spacer(Modifier.height(4.dp))
                 GText(st.description, size = 11.sp, color = Color(st.uiDim), weight = FontWeight.Normal, upper = false)
@@ -321,6 +330,17 @@ private fun SettingsTab(vm: AppViewModel) {
                 GToggle("Полосы под радаром", s.showBars, "скорость и точность GPS вместо здоровья и брони") { v ->
                     vm.updateSettings { it.copy(showBars = v) }
                 }
+                GToggle("Игровой HUD", s.gameHud, "деньги, звёзды розыска, опыт, спидометр — у каждого стиля свой") { v ->
+                    vm.updateSettings { it.copy(gameHud = v) }
+                }
+                GToggle("Эффекты экрана", s.effects, "сканлайны, глитчи, виньетка, падающий код, день и ночь") { v ->
+                    vm.updateSettings { it.copy(effects = v) }
+                }
+                GToggle("След за игроком", s.trail, "светящийся след, пунктир шагов — зависит от стиля") { v ->
+                    vm.updateSettings { it.copy(trail = v) }
+                }
+                Spacer(Modifier.height(6.dp))
+                GButton("Стереть след", { vm.clearTrail() }, Modifier.fillMaxWidth())
             }
         }
         item { SectionTitle("О приложении") }
@@ -329,11 +349,65 @@ private fun SettingsTab(vm: AppViewModel) {
                 GText(
                     "Карта © участники OpenStreetMap, тайлы OpenFreeMap. Поиск — Photon (komoot). " +
                             "Магазины — Overpass API. Маршруты — OSRM (FOSSGIS). Без аккаунтов, отзывов и рекламы. " +
+                            "Шрифты — Google Fonts (SIL OFL / Apache). " +
                             "Стили — фанатские, вдохновлены играми и не связаны с их издателями.",
                     size = 12.sp, color = Color(g.uiDim), weight = FontWeight.Normal, upper = false
                 )
             }
         }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+// ---------------- Статистика ----------------
+
+@Composable
+private fun StatsTab(vm: AppViewModel) {
+    val g = LocalGame.current
+    val st = vm.stats
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            GPanel(Modifier.fillMaxWidth()) {
+                TitleText("${g.moneyPrefix}${String.format(Locale.US, "%,d", st.money)}", 30.sp, Color(g.moneyColor))
+                Spacer(Modifier.height(6.dp))
+                StatRow("Уровень", "${st.level}")
+                StatRow("Пройдено всего", Geo.fmtDist(st.distance))
+                StatRow("Из них пешком", Geo.fmtDist(st.walk))
+                StatRow("Шагов", "${st.steps}")
+                StatRow("Маршрутов завершено", "${st.routesDone}")
+                StatRow("Встреч и взломов", "${st.encounters}")
+                StatRow("Чит-кодов введено", "${st.cheats}")
+            }
+        }
+        item { SectionTitle("Достижения ${st.achievements.size}/${Achievements.all.size}") }
+        items(Achievements.all, key = { it.first }) { (id, text) ->
+            val got = id in st.achievements
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                GText(if (got) "★" else "☆", size = 18.sp, color = if (got) Color(g.uiAccent) else Color(g.uiDim))
+                Spacer(Modifier.width(10.dp))
+                GText(
+                    if (got || id != "secret") text else "??? — секретное",
+                    size = 13.sp, upper = false,
+                    color = if (got) Color(g.uiText) else Color(g.uiDim)
+                )
+            }
+        }
+        item {
+            GText(
+                "Деньги начисляются за пройденные метры и доезды по маршруту. Звёзды розыска появляются рядом с полицией. " +
+                        "А ещё попробуй ввести в поиск коды из старых игр…",
+                size = 11.sp, color = Color(g.uiDim), weight = FontWeight.Normal, upper = false,
+                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatRow(label: String, value: String) {
+    val g = LocalGame.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        GText(label, size = 13.sp, color = Color(g.uiDim), upper = false, weight = FontWeight.Normal, modifier = Modifier.weight(1f))
+        GText(value, size = 13.sp, upper = false)
     }
 }

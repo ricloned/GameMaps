@@ -1,13 +1,14 @@
 package com.gamemaps.app.map
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.RectF
 import com.gamemaps.app.model.Box
 import com.gamemaps.app.model.GeoPoint
-import com.gamemaps.app.model.PoiCategory
 import com.gamemaps.app.model.Settings
 import com.gamemaps.app.style.GameStyle
 import com.gamemaps.app.style.MapStyleJson
+import org.json.JSONObject
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -16,23 +17,31 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.sources.GeoJsonSource
 
+/** Объект, по которому тапнули: слой, свойства и координата. */
+data class MapHit(val layer: String, val props: JSONObject, val lat: Double, val lon: Double)
+
 /** Всё, что касается MapLibre: стиль, источники данных, камера, жесты. */
 class MapRenderer(ctx: Context) {
 
     interface Listener {
-        fun onTap(lat: Double, lon: Double, poiId: String?)
+        fun onTap(lat: Double, lon: Double, hit: MapHit?)
         fun onLongPress(lat: Double, lon: Double)
         fun onCameraIdle()
         fun onCameraMove(bearing: Float)
         fun onUserGesture()
     }
 
+    private val app = ctx.applicationContext
     var listener: Listener? = null
     private var map: MapLibreMap? = null
     private var style: Style? = null
     private var styleJson: String? = null
+    private var images: Map<String, Bitmap> = emptyMap()
+    private var imagesFor: String? = null
     private val sourceData = HashMap<String, String>()
     private val density = ctx.resources.displayMetrics.density
+
+    private val tapLayers = arrayOf("poi-blips", "poi-tiles", "poi-landmark")
 
     fun attach(m: MapLibreMap, g: GameStyle, s: Settings, start: GeoPoint?) {
         map = m
@@ -43,13 +52,7 @@ class MapRenderer(ctx: Context) {
         m.uiSettings.isAttributionEnabled = false
 
         m.addOnMapClickListener { ll ->
-            val pt = m.projection.toScreenLocation(ll)
-            val r = 18 * density
-            val id = runCatching {
-                m.queryRenderedFeatures(RectF(pt.x - r, pt.y - r, pt.x + r, pt.y + r), "poi-blips")
-                    .firstOrNull()?.getStringProperty("pid")
-            }.getOrNull()
-            listener?.onTap(ll.latitude, ll.longitude, id)
+            listener?.onTap(ll.latitude, ll.longitude, hitAt(m, ll))
             true
         }
         m.addOnMapLongClickListener { ll ->
@@ -65,9 +68,53 @@ class MapRenderer(ctx: Context) {
         m.cameraPosition = if (start != null)
             CameraPosition.Builder().target(LatLng(start.lat, start.lon)).zoom(16.0).build()
         else
-            CameraPosition.Builder().target(LatLng(50.0, 20.0)).zoom(3.5).build()
+            CameraPosition.Builder().target(LatLng(55.75, 37.62)).zoom(4.0).build()
 
         apply(g, s)
+    }
+
+    private fun hitAt(m: MapLibreMap, ll: LatLng): MapHit? {
+        val pt = m.projection.toScreenLocation(ll)
+        val r = 18 * density
+        for (layer in tapLayers) {
+            val f = runCatching {
+                m.queryRenderedFeatures(RectF(pt.x - r, pt.y - r, pt.x + r, pt.y + r), layer).firstOrNull()
+            }.getOrNull() ?: continue
+            return featureToHit(layer, f.toJson(), ll.latitude, ll.longitude)
+        }
+        return null
+    }
+
+    private fun featureToHit(layer: String, json: String, lat: Double, lon: Double): MapHit? = runCatching {
+        val o = JSONObject(json)
+        val props = o.optJSONObject("properties") ?: JSONObject()
+        val geom = o.optJSONObject("geometry")
+        var la = lat
+        var lo = lon
+        if (geom != null && geom.optString("type") == "Point") {
+            val c = geom.getJSONArray("coordinates")
+            lo = c.getDouble(0); la = c.getDouble(1)
+        }
+        MapHit(layer, props, la, lo)
+    }.getOrNull()
+
+    /** POI из тайлов вокруг точки (для «встреч» и профайлера). */
+    fun tilePoisNear(lat: Double, lon: Double, meters: Double): List<MapHit> {
+        val m = map ?: return emptyList()
+        if (style == null) return emptyList()
+        return runCatching {
+            val pt = m.projection.toScreenLocation(LatLng(lat, lon))
+            val mpp = m.projection.getMetersPerPixelAtLatitude(lat)
+            val r = (meters / mpp).toFloat() * density
+            m.queryRenderedFeatures(RectF(pt.x - r, pt.y - r, pt.x + r, pt.y + r), "poi-tiles", "poi-landmark")
+                .mapNotNull { featureToHit("poi-tiles", it.toJson(), lat, lon) }
+        }.getOrDefault(emptyList())
+    }
+
+    fun metersPerDp(): Double? {
+        val m = map ?: return null
+        val t = m.cameraPosition.target ?: return null
+        return runCatching { m.projection.getMetersPerPixelAtLatitude(t.latitude) }.getOrNull()
     }
 
     /** Применяет игровой стиль и настройки. Пересобирает стиль, только если он реально поменялся. */
@@ -77,11 +124,18 @@ class MapRenderer(ctx: Context) {
         if (json == styleJson) return
         styleJson = json
         style = null
-        m.setStyle(Style.Builder().fromJson(json)) { st ->
+        if (imagesFor != g.id) {
+            images = MarkerIcons.all(app, g, density)
+            imagesFor = g.id
+        }
+        val imgs = images
+        val builder = Style.Builder().fromJson(json)
+        for ((id, bmp) in imgs) builder.withImage(id, bmp)
+        m.setStyle(builder) { st ->
             if (styleJson != json) return@setStyle
-            st.addImage("player", MarkerIcons.player(g, density))
-            st.addImage("waypoint", MarkerIcons.waypoint(g, density))
-            PoiCategory.entries.forEach { st.addImage("blip_${it.name}", MarkerIcons.blip(g, it, density)) }
+            for ((id, bmp) in imgs) {
+                if (st.getImage(id) == null) st.addImage(id, bmp)
+            }
             style = st
             for ((id, data) in sourceData) {
                 st.getSourceAs<GeoJsonSource>(id)?.setGeoJson(data)
@@ -89,7 +143,7 @@ class MapRenderer(ctx: Context) {
         }
     }
 
-    /** Обновить GeoJSON источника (route, draft, dest, pois, player). */
+    /** Обновить GeoJSON источника (route, draft, dest, pois, player, trail). */
     fun set(id: String, geojson: String) {
         if (sourceData[id] == geojson) return
         sourceData[id] = geojson
