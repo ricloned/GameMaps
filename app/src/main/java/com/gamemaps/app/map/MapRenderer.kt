@@ -142,6 +142,6 @@ class MapRenderer(ctx: Context) {
     fun viewport(): Pair<Box, Double>? {
         val m = map ?: return null
         val b = m.projection.visibleRegion.latLngBounds
-        return Box(b.latSouth, b.lonWest, b.latNorth, b.lonEast) to m.cameraPosition.zoom
+        return Box(b.latitudeSouth, b.longitudeWest, b.latitudeNorth, b.longitudeEast) to m.cameraPosition.zoom
     }
 }
