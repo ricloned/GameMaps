@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.radarmap.app"
+    namespace = "com.gamemaps.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.radarmap.app"
+        applicationId = "com.gamemaps.app"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

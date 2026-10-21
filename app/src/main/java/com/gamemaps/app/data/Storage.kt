@@ -1,14 +1,14 @@
-package com.radarmap.app.data
+package com.gamemaps.app.data
 
 import android.content.Context
-import com.radarmap.app.model.SavedRoute
-import com.radarmap.app.model.Settings
+import com.gamemaps.app.model.SavedRoute
+import com.gamemaps.app.model.Settings
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** Локальное хранение настроек и своих маршрутов (без аккаунтов). */
 class Storage(ctx: Context) {
-    private val sp = ctx.getSharedPreferences("radarmap", Context.MODE_PRIVATE)
+    private val sp = ctx.getSharedPreferences("gamemaps", Context.MODE_PRIVATE)
 
     fun loadSettings(): Settings = try {
         Settings.fromJson(JSONObject(sp.getString("settings", null) ?: "{}"))

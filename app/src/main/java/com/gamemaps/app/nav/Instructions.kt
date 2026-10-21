@@ -1,4 +1,4 @@
-package com.radarmap.app.nav
+package com.gamemaps.app.nav
 
 /** Текст подсказок навигации по манёврам OSRM. */
 object Instructions {

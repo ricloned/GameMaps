@@ -1,6 +1,6 @@
-package com.radarmap.app.map
+package com.gamemaps.app.map
 
-import com.radarmap.app.model.GeoPoint
+import com.gamemaps.app.model.GeoPoint
 import org.json.JSONArray
 import org.json.JSONObject
 

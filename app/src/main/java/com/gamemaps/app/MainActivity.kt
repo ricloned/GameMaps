@@ -1,4 +1,4 @@
-package com.radarmap.app
+package com.gamemaps.app
 
 import android.graphics.Color
 import android.os.Bundle
@@ -7,7 +7,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import com.radarmap.app.ui.RadarMapApp
+import com.gamemaps.app.ui.GameMapsApp
 import org.maplibre.android.MapLibre
 
 class MainActivity : ComponentActivity() {
@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
         )
-        setContent { RadarMapApp(vm) }
+        setContent { GameMapsApp(vm) }
     }
 
     override fun onStart() {

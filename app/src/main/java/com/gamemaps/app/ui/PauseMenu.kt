@@ -1,4 +1,4 @@
-package com.radarmap.app.ui
+package com.gamemaps.app.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -39,12 +39,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.radarmap.app.AppViewModel
-import com.radarmap.app.model.PoiCategory
-import com.radarmap.app.model.Profile
-import com.radarmap.app.nav.Geo
-import com.radarmap.app.style.GameStyle
-import com.radarmap.app.style.GameStyles
+import com.gamemaps.app.AppViewModel
+import com.gamemaps.app.model.PoiCategory
+import com.gamemaps.app.model.Profile
+import com.gamemaps.app.nav.Geo
+import com.gamemaps.app.style.GameStyle
+import com.gamemaps.app.style.GameStyles
 
 private val TABS = listOf("Стиль", "Места", "Маршруты", "Настройки")
 
@@ -66,7 +66,7 @@ fun PauseMenu(vm: AppViewModel) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    GText("Radar Map", size = 32.sp, color = Color(g.uiAccent), shadow = true)
+                    GText("GameMaps", size = 32.sp, color = Color(g.uiAccent), shadow = true)
                     GText("${g.name} · ${g.tag}", size = 12.sp, color = Color(g.uiDim), weight = FontWeight.Normal, upper = false)
                 }
                 HudButton(Glyph.CLOSE, { vm.menuOpen = false }, size = 46.dp)

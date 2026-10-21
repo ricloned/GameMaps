@@ -1,4 +1,4 @@
-package com.radarmap.app.ui
+package com.gamemaps.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,12 +46,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.radarmap.app.AppViewModel
-import com.radarmap.app.model.GeoPoint
-import com.radarmap.app.model.Place
-import com.radarmap.app.model.PoiCategory
-import com.radarmap.app.model.Profile
-import com.radarmap.app.nav.Geo
+import com.gamemaps.app.AppViewModel
+import com.gamemaps.app.model.GeoPoint
+import com.gamemaps.app.model.Place
+import com.gamemaps.app.model.PoiCategory
+import com.gamemaps.app.model.Profile
+import com.gamemaps.app.nav.Geo
 
 // ===================== Поиск =====================
 

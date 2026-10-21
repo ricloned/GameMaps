@@ -1,6 +1,6 @@
-package com.radarmap.app.nav
+package com.gamemaps.app.nav
 
-import com.radarmap.app.model.GeoPoint
+import com.gamemaps.app.model.GeoPoint
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.asin

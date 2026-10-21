@@ -1,13 +1,13 @@
-package com.radarmap.app.map
+package com.gamemaps.app.map
 
 import android.content.Context
 import android.graphics.RectF
-import com.radarmap.app.model.Box
-import com.radarmap.app.model.GeoPoint
-import com.radarmap.app.model.PoiCategory
-import com.radarmap.app.model.Settings
-import com.radarmap.app.style.GameStyle
-import com.radarmap.app.style.MapStyleJson
+import com.gamemaps.app.model.Box
+import com.gamemaps.app.model.GeoPoint
+import com.gamemaps.app.model.PoiCategory
+import com.gamemaps.app.model.Settings
+import com.gamemaps.app.style.GameStyle
+import com.gamemaps.app.style.MapStyleJson
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng

@@ -1,6 +1,6 @@
-package com.radarmap.app.style
+package com.gamemaps.app.style
 
-import com.radarmap.app.model.Settings
+import com.gamemaps.app.model.Settings
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale

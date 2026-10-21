@@ -1,4 +1,4 @@
-package com.radarmap.app.ui
+package com.gamemaps.app.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -38,11 +38,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.radarmap.app.AppViewModel
-import com.radarmap.app.NavState
-import com.radarmap.app.model.RouteResult
-import com.radarmap.app.model.ViewMode
-import com.radarmap.app.nav.Geo
+import com.gamemaps.app.AppViewModel
+import com.gamemaps.app.NavState
+import com.gamemaps.app.model.RouteResult
+import com.gamemaps.app.model.ViewMode
+import com.gamemaps.app.nav.Geo
 import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter

@@ -1,4 +1,4 @@
-package com.radarmap.app.style
+package com.gamemaps.app.style
 
 enum class UiFont { SANS, SERIF, MONO, CONDENSED }
 enum class BlipShape { CIRCLE, SQUARE, DIAMOND, HEX }

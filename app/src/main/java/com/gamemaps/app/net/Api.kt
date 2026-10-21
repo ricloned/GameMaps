@@ -1,15 +1,15 @@
-package com.radarmap.app.net
+package com.gamemaps.app.net
 
-import com.radarmap.app.model.Box
-import com.radarmap.app.model.GeoPoint
-import com.radarmap.app.model.Place
-import com.radarmap.app.model.PoiCategory
-import com.radarmap.app.model.Profile
-import com.radarmap.app.model.ReverseInfo
-import com.radarmap.app.model.RouteResult
-import com.radarmap.app.model.RouteStep
-import com.radarmap.app.nav.Geo
-import com.radarmap.app.nav.Instructions
+import com.gamemaps.app.model.Box
+import com.gamemaps.app.model.GeoPoint
+import com.gamemaps.app.model.Place
+import com.gamemaps.app.model.PoiCategory
+import com.gamemaps.app.model.Profile
+import com.gamemaps.app.model.ReverseInfo
+import com.gamemaps.app.model.RouteResult
+import com.gamemaps.app.model.RouteStep
+import com.gamemaps.app.nav.Geo
+import com.gamemaps.app.nav.Instructions
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -25,7 +25,7 @@ import java.util.Locale
  * Все вызовы блокирующие — запускать в Dispatchers.IO.
  */
 object Api {
-    private const val UA = "RadarMap/1.0 (Android; personal map app)"
+    private const val UA = "GameMaps/1.0 (Android; personal map app)"
     private val OVERPASS = listOf(
         "https://overpass-api.de/api/interpreter",
         "https://overpass.private.coffee/api/interpreter",

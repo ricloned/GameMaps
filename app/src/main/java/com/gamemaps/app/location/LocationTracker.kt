@@ -1,4 +1,4 @@
-package com.radarmap.app.location
+package com.gamemaps.app.location
 
 import android.annotation.SuppressLint
 import android.content.Context

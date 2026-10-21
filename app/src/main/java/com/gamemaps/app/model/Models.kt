@@ -1,4 +1,4 @@
-package com.radarmap.app.model
+package com.gamemaps.app.model
 
 import org.json.JSONArray
 import org.json.JSONObject

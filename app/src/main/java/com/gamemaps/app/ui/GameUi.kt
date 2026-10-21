@@ -1,4 +1,4 @@
-package com.radarmap.app.ui
+package com.gamemaps.app.ui
 
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
@@ -50,12 +50,12 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.radarmap.app.map.MarkerIcons
-import com.radarmap.app.model.PoiCategory
-import com.radarmap.app.style.BlipShape
-import com.radarmap.app.style.GameStyle
-import com.radarmap.app.style.GameStyles
-import com.radarmap.app.style.UiFont
+import com.gamemaps.app.map.MarkerIcons
+import com.gamemaps.app.model.PoiCategory
+import com.gamemaps.app.style.BlipShape
+import com.gamemaps.app.style.GameStyle
+import com.gamemaps.app.style.GameStyles
+import com.gamemaps.app.style.UiFont
 
 val LocalGame = staticCompositionLocalOf { GameStyles.V }
 

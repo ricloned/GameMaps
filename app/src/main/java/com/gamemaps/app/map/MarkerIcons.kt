@@ -1,14 +1,14 @@
-package com.radarmap.app.map
+package com.gamemaps.app.map
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
-import com.radarmap.app.model.PoiCategory
-import com.radarmap.app.style.BlipShape
-import com.radarmap.app.style.GameStyle
-import com.radarmap.app.style.UiFont
+import com.gamemaps.app.model.PoiCategory
+import com.gamemaps.app.style.BlipShape
+import com.gamemaps.app.style.GameStyle
+import com.gamemaps.app.style.UiFont
 import kotlin.math.cos
 import kotlin.math.sin
 

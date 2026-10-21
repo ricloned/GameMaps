@@ -1,4 +1,4 @@
-package com.radarmap.app.ui
+package com.gamemaps.app.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -45,9 +45,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.radarmap.app.AppViewModel
-import com.radarmap.app.map.MarkerIcons
-import com.radarmap.app.model.ViewMode
+import com.gamemaps.app.AppViewModel
+import com.gamemaps.app.map.MarkerIcons
+import com.gamemaps.app.model.ViewMode
 import kotlinx.coroutines.delay
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
@@ -56,7 +56,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
-fun RadarMapApp(vm: AppViewModel) {
+fun GameMapsApp(vm: AppViewModel) {
     val g = vm.style
     val context = LocalContext.current
     val perms = remember {

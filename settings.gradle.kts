@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "RadarMap"
+rootProject.name = "GameMaps"
 include(":app")
