@@ -50,6 +50,12 @@ class MapRenderer(ctx: Context) {
         m.uiSettings.isCompassEnabled = false
         m.uiSettings.isLogoEnabled = false
         m.uiSettings.isAttributionEnabled = false
+        // Лёгкий поворот двумя пальцами: не блокируем поворот при одновременном зуме
+        m.uiSettings.isRotateGesturesEnabled = true
+        m.uiSettings.isIncreaseRotateThresholdWhenScaling = false
+        m.uiSettings.isDisableRotateWhenScaling = false
+        m.uiSettings.isIncreaseScaleThresholdWhenRotating = true
+        runCatching { m.gesturesManager.rotateGestureDetector.angleThreshold = 4f }
 
         m.addOnMapClickListener { ll ->
             listener?.onTap(ll.latitude, ll.longitude, hitAt(m, ll))

@@ -12,15 +12,30 @@ android {
         applicationId = "com.gamemaps.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // Номер сборки GitHub Actions → версия растёт сама, APK ставится поверх старого
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+        versionCode = 100 + run
+        versionName = "1.$run"
+    }
+
+    // Постоянный ключ подписи: без него каждая сборка подписывалась бы новым ключом
+    // и Android не дал бы обновить приложение без удаления.
+    signingConfigs {
+        create("gamemaps") {
+            storeFile = file("gamemaps.jks")
+            storePassword = "gamemaps"
+            keyAlias = "gamemaps"
+            keyPassword = "gamemaps"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Подписываем debug-ключом, чтобы release-APK можно было сразу поставить на телефон
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("gamemaps")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("gamemaps")
         }
     }
 

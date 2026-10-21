@@ -3,8 +3,10 @@ name: Build APK
 on:
   push:
     branches: [ "**" ]
-  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -28,13 +30,25 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build APK
-        run: ./gradlew assembleDebug assembleRelease --stacktrace
+        run: ./gradlew assembleRelease
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk "out/GameMaps-1.${{ github.run_number }}.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: GameMaps-apk
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+          name: GameMaps-1.${{ github.run_number }}
+          path: out/*.apk
           if-no-files-found: error
+
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.${{ github.run_number }}
+          name: GameMaps 1.${{ github.run_number }}
+          files: out/*.apk
+          make_latest: true
