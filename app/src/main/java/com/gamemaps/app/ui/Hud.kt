@@ -140,7 +140,7 @@ private fun HudButtons(vm: AppViewModel, onRequestPermission: () -> Unit) {
     )
     val b = vm.cameraBearing
     val rotated = b > 1f && b < 359f
-    val autoRotating = vm.following && vm.settings.headingUp && (radar || vm.nav != null)
+    val autoRotating = vm.following && vm.settings.headingUp
     if (rotated && !autoRotating) HudButton(Glyph.NORTH, { vm.resetNorth() }, rotation = -b)
     HudButton(Glyph.SEARCH, { vm.openSearch() })
     HudButton(Glyph.ROUTE, { if (vm.editing) vm.closeEditor() else vm.startEditor() }, active = vm.editing)

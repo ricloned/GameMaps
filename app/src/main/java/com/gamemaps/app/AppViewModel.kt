@@ -214,16 +214,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
     fun toggleMode() {
         viewMode = if (viewMode == ViewMode.MAP) ViewMode.RADAR else ViewMode.MAP
         if (viewMode == ViewMode.RADAR) {
-            following = true
+            setFollow(true)
             followCamera(force = true)
         } else {
             val c = myPoint().takeIf { following } ?: renderer.center() ?: return
-            renderer.moveTo(c.lat, c.lon, null, if (nav != null) null else 0f, if (nav != null) null else 0.0, 600)
+            val b = if (following && settings.headingUp) currentHeading() else 0f
+            renderer.moveTo(c.lat, c.lon, null, b, if (nav != null) null else 0.0, 600)
         }
     }
 
     fun locate() {
-        following = true
+        setFollow(true)
         val z = renderer.zoom() ?: 0.0
         followCamera(force = true, zoom = if (z < 14.0) 16.0 else null)
     }
@@ -239,7 +240,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
     }
 
     override fun onUserGesture() {
-        following = false
+        setFollow(false)
     }
 
     override fun onTap(lat: Double, lon: Double, hit: MapHit?) {
@@ -380,7 +381,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         return if (l != null && l.hasBearing() && l.hasSpeed() && l.speed > 2.5f) l.bearing else heading
     }
 
-    private fun headingUpActive() = settings.headingUp && (viewMode == ViewMode.RADAR || nav != null)
+    private fun headingUpActive() = settings.headingUp
+
+    /** Пока карта следует за игроком, стрелку рисует оверлей в центре экрана (без мигания). */
+    private fun setFollow(v: Boolean) {
+        if (following == v) return
+        following = v
+        updatePlayer()
+    }
 
     private fun followCamera(force: Boolean = false, zoom: Double? = null) {
         val l = location ?: return
@@ -402,6 +410,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
 
     private fun updatePlayer() {
         val l = location ?: return
+        if (following) {
+            renderer.set("player", GeoJson.EMPTY)
+            return
+        }
         renderer.set("player", GeoJson.fc(listOf(
             GeoJson.point(l.latitude, l.longitude, mapOf("bearing" to currentHeading().toDouble()))
         )))
@@ -611,7 +623,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
 
     private fun select(p: Place, fly: Boolean) {
         selected = p
-        if (fly) following = false
+        if (fly) setFollow(false)
         renderDest()
         if (fly) renderer.moveTo(p.point.lat, p.point.lon, 16.5, null, null, 900)
     }
@@ -752,7 +764,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         nav = NavState(r, activeTargets, startedAt = prev?.startedAt ?: SystemClock.elapsedRealtime())
         offCount = 0
         selected = null
-        following = true
+        setFollow(true)
         followCamera(force = true, zoom = 17.0)
         location?.let { updateNav(it) }
     }
@@ -952,7 +964,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         draft.clear()
         draft.addAll(r.points)
         recomputeDraft()
-        following = false
+        setFollow(false)
         renderer.fit(r.points.map { it.point })
     }
 

@@ -313,7 +313,7 @@ private fun SettingsTab(vm: AppViewModel) {
         item { SectionTitle("Радар и навигация") }
         item {
             GPanel(Modifier.fillMaxWidth()) {
-                GToggle("Курс вверх", s.headingUp, "в режиме радара и навигации карта крутится по ходу движения") { v ->
+                GToggle("Курс вверх", s.headingUp, "карта крутится по ходу движения (и на полном экране, и в радаре)") { v ->
                     vm.updateSettings { it.copy(headingUp = v) }
                 }
                 GToggle("3D-наклон", s.tilt3d, "вид как с камеры за машиной") { v -> vm.updateSettings { it.copy(tilt3d = v) } }

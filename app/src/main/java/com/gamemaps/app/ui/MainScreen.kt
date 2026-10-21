@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +38,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +51,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.gamemaps.app.AppViewModel
 import com.gamemaps.app.map.GameFonts
+import com.gamemaps.app.map.MarkerIcons
 import com.gamemaps.app.model.ViewMode
 import com.gamemaps.app.style.Fx
 import com.gamemaps.app.style.HudKind
@@ -121,6 +126,8 @@ fun GameMapsApp(vm: AppViewModel) {
                         )
                     }
                 }
+
+                PlayerOverlay(vm, Modifier.align(Alignment.Center).offset(y = if (radar) shiftY else 0.dp))
 
                 if (vm.settings.effects) MapOverlays(g, vm.forceNight)
 
@@ -217,5 +224,21 @@ private fun Bar(label: String, fraction: Float, color: Color) {
         }
         Spacer(Modifier.width(8.dp))
         GText(label, size = 11.sp, shadow = true, modifier = Modifier.width(92.dp), maxLines = 1)
+    }
+}
+
+/** Стрелка игрока поверх карты в центре экрана — пока карта следует за игроком. */
+@Composable
+fun PlayerOverlay(vm: AppViewModel, modifier: Modifier) {
+    if (!vm.following || vm.location == null) return
+    val g = LocalGame.current
+    val d = LocalDensity.current.density
+    val bmp = remember(g.id, d) { MarkerIcons.player(g, d).asImageBitmap() }
+    val rot = vm.currentHeading() - vm.cameraBearing
+    Box(modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(48.dp)) {
+            drawCircle(Color(g.player).copy(alpha = 0.18f), radius = size.minDimension / 2f)
+        }
+        Image(bitmap = bmp, contentDescription = null, modifier = Modifier.size(44.dp).rotate(rot))
     }
 }
