@@ -3,6 +3,7 @@ package com.gamemaps.app.style
 import com.gamemaps.app.model.PoiCategory
 import com.gamemaps.app.model.Settings
 import com.gamemaps.app.model.TileCats
+import com.gamemaps.app.map.Textures
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -15,6 +16,7 @@ object MapStyleJson {
 
     const val EMPTY_FC = "{\"type\":\"FeatureCollection\",\"features\":[]}"
     private const val TILES = "https://tiles.openfreemap.org/planet"
+    private const val SAT_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
     private const val GLYPHS = "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf"
 
     private fun a(vararg v: Any): JSONArray {
@@ -134,41 +136,90 @@ object MapStyleJson {
         val bold = a("Noto Sans Bold")
         val spacing = if (g.labelUpper) 0.08 else 0.02
 
+        // --- Текстуры стиля (паттерны) ---
+        val sat = s.satellite
+        val tex: Set<String> = if (s.textures && !sat) Textures.slots(g.texture) else emptySet()
+        fun fillPaint(slot: String, color: Int, opacity: Double = 1.0): JSONObject {
+            val p = if (slot in tex) o("fill-pattern" to "tex_$slot") else o("fill-color" to css(color))
+            if (opacity < 1.0) p.put("fill-opacity", opacity)
+            return p
+        }
+
+        if (sat) {
+            // --- Спутник: снимки + подкраска под игровой стиль ---
+            val look = SatelliteLook.of(g.id)
+            layers.put(layer("bg", "background", source = null, paint = o("background-color" to "#000000")))
+            layers.put(layer("satellite", "raster", source = "sat",
+                paint = o(
+                    "raster-saturation" to look.saturation,
+                    "raster-contrast" to look.contrast,
+                    "raster-brightness-min" to look.brightnessMin,
+                    "raster-brightness-max" to look.brightnessMax,
+                    "raster-hue-rotate" to look.hue,
+                    "raster-fade-duration" to 150
+                )))
+            if (look.tint != null && look.tintOpacity > 0) {
+                layers.put(layer("sat-tint", "background", source = null,
+                    paint = o("background-color" to css(look.tint), "background-opacity" to look.tintOpacity)))
+            }
+        } else {
         // --- Подложка ---
-        layers.put(layer("bg", "background", source = null, paint = o("background-color" to css(g.land))))
+        layers.put(layer("bg", "background", source = null,
+            paint = if ("land" in tex) o("background-pattern" to "tex_land") else o("background-color" to css(g.land))))
         layers.put(layer("landuse", "fill", "landuse",
             filter = classIn("residential", "commercial", "industrial", "retail", "suburb", "neighbourhood", "quarry", "railway"),
-            paint = o("fill-color" to css(g.landUrban))))
-        layers.put(layer("landcover", "fill", "landcover",
-            filter = classIn("wood", "forest", "grass", "wetland", "scrub", "farmland"),
-            paint = o(
-                "fill-color" to a("match", a("get", "class"), a("wood", "forest"), css(g.wood), css(g.park)),
-                "fill-opacity" to 0.85
-            )))
-        layers.put(layer("park", "fill", "park", paint = o("fill-color" to css(g.park))))
-        layers.put(layer("water", "fill", "water", paint = o("fill-color" to css(g.water))))
+            paint = fillPaint("urban", g.landUrban)))
+        layers.put(layer("landuse-farm", "fill", "landuse", filter = classIn("farmland", "allotments", "orchard"),
+            paint = fillPaint("farm", g.park)))
+        layers.put(layer("landcover-grass", "fill", "landcover",
+            filter = classIn("grass", "wetland", "scrub"),
+            paint = fillPaint("park", g.park, 0.9)))
+        layers.put(layer("landcover-farm", "fill", "landcover", filter = classIn("farmland"),
+            paint = fillPaint("farm", g.park, 0.95)))
+        layers.put(layer("landcover-sand", "fill", "landcover", filter = classIn("sand", "beach"),
+            paint = fillPaint("sand", Textures.shade(g.land, 0.25f))))
+        layers.put(layer("park", "fill", "park", paint = fillPaint("park", g.park)))
+        layers.put(layer("landcover-wood", "fill", "landcover",
+            filter = classIn("wood", "forest"),
+            paint = fillPaint("wood", g.wood, 0.95)))
+        layers.put(layer("water", "fill", "water", paint = fillPaint("water", g.water)))
         layers.put(layer("waterway", "line", "waterway",
             paint = o("line-color" to css(g.waterLine), "line-width" to widths(1.0, 0.0, doubleArrayOf(8.0, 0.5, 14.0, 2.0, 18.0, 6.0)))))
+        }
 
         // --- Здания ---
         if (s.buildings) {
-            if (s.buildings3d) {
-                layers.put(layer("building-3d", "fill-extrusion", "building", minzoom = 14,
-                    paint = o(
-                        "fill-extrusion-color" to css(g.building),
-                        "fill-extrusion-height" to a("coalesce", a("get", "render_height"), 8),
-                        "fill-extrusion-base" to a("coalesce", a("get", "render_min_height"), 0),
-                        "fill-extrusion-opacity" to 0.85
-                    )))
+            val blocky = g.blockBuildings
+            if (s.buildings3d || blocky || sat) {
+                // В «кубическом» стиле высота кратна блоку, а стены — из текстуры досок
+                val rawH = a("coalesce", a("get", "render_height"), 6)
+                val height: Any = if (blocky) a("*", a("ceil", a("/", rawH, 4)), 4) else rawH
+                val paint = o(
+                    "fill-extrusion-height" to height,
+                    "fill-extrusion-base" to a("coalesce", a("get", "render_min_height"), 0),
+                    "fill-extrusion-opacity" to (if (blocky && !sat) 1.0 else if (sat) 0.78 else 0.9),
+                    "fill-extrusion-vertical-gradient" to true
+                )
+                if ("building" in tex) paint.put("fill-extrusion-pattern", "tex_building")
+                else paint.put("fill-extrusion-color", css(if (sat) Textures.shade(g.building, 0.35f) else Textures.shade(g.building, 0.12f)))
+                if (sat && !s.buildings3d) {
+                    // спутник без 3D: только контуры домов
+                    layers.put(layer("building-outline", "line", "building", minzoom = 15,
+                        paint = o("line-color" to css(g.buildingLine), "line-opacity" to 0.55, "line-width" to 1)))
+                } else {
+                    layers.put(layer("building-3d", "fill-extrusion", "building", minzoom = 14, paint = paint))
+                }
             } else {
-                layers.put(layer("building", "fill", "building", minzoom = 13,
-                    paint = o("fill-color" to css(g.building), "fill-outline-color" to css(g.buildingLine))))
+                val paint = fillPaint("building", g.building)
+                paint.put("fill-outline-color", css(g.buildingLine))
+                layers.put(layer("building", "fill", "building", minzoom = 13, paint = paint))
             }
         }
 
         // --- Дороги ---
         layers.put(layer("road-path", "line", "transportation", filter = classIn("path", "track"), minzoom = 14,
             paint = o(
+                "line-opacity" to (if (sat) 0.5 else 1.0),
                 "line-color" to css(g.path),
                 "line-width" to widths(sc, 0.0, doubleArrayOf(14.0, 0.6, 18.0, 2.5)),
                 "line-dasharray" to a(2, 1.5)
@@ -192,13 +243,15 @@ object MapStyleJson {
         if (casing != null) {
             for (t in tiers) {
                 layers.put(layer("${t.id}-casing", "line", "transportation", filter = t.filter, minzoom = maxOf(t.minzoom, 11),
-                    paint = o("line-color" to css(casing), "line-width" to widths(sc, 2.5, t.stops)),
+                    paint = o("line-color" to css(casing), "line-width" to widths(sc, 2.5, t.stops), "line-opacity" to (if (sat) 0.5 else 1.0)),
                     layout = lineLayout()))
             }
         }
         for (t in tiers) {
             layers.put(layer("road-${t.id}", "line", "transportation", filter = t.filter, minzoom = t.minzoom,
-                paint = o("line-color" to css(t.color), "line-width" to widths(sc, 0.0, t.stops)),
+                paint = (if ("road" in tex) o("line-pattern" to "tex_road", "line-width" to widths(sc, 0.0, t.stops))
+                else o("line-color" to css(t.color), "line-width" to widths(sc, 0.0, t.stops)))
+                    .also { if (sat) it.put("line-opacity", if (t.id == "minor") 0.45 else 0.7) },
                 layout = lineLayout()))
         }
         layers.put(layer("boundary", "line", "boundary",
@@ -354,6 +407,15 @@ object MapStyleJson {
         // --- Источники ---
         val sources = JSONObject()
         sources.put("omt", o("type" to "vector", "url" to TILES))
+        if (sat) {
+            sources.put("sat", o(
+                "type" to "raster",
+                "tiles" to a(SAT_TILES),
+                "tileSize" to 256,
+                "maxzoom" to 19,
+                "attribution" to "Esri, Maxar, Earthstar Geographics"
+            ))
+        }
         for (id in listOf("route", "draft", "dest", "pois", "player", "trail")) {
             sources.put(id, o("type" to "geojson", "data" to JSONObject(EMPTY_FC)))
         }
@@ -362,6 +424,7 @@ object MapStyleJson {
         root.put("version", 8)
         root.put("name", g.name)
         root.put("glyphs", GLYPHS)
+        root.put("light", o("anchor" to "viewport", "color" to "#FFFFFF", "intensity" to 0.4, "position" to a(1.15, 210, 30)))
         root.put("sources", sources)
         root.put("layers", layers)
         return root.toString()

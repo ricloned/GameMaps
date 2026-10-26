@@ -79,6 +79,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         private set
     var cameraBearing by mutableFloatStateOf(0f)
         private set
+    var cameraTilt by mutableFloatStateOf(0f)
+        private set
     var metersPerDp by mutableStateOf(1.0)
         private set
     var hasPermission by mutableStateOf(false)
@@ -231,8 +233,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
 
     fun resetNorth() = renderer.resetNorth()
 
-    override fun onCameraMove(bearing: Float) {
+    /** Спутник вкл/выкл. При включении сразу 3D-дома и наклон, как в навигаторах. */
+    fun toggleSatellite() {
+        val on = !settings.satellite
+        updateSettings { it.copy(satellite = on, buildings3d = if (on) true else it.buildings3d) }
+        if (on && cameraTilt < 10f) renderer.setTilt(45.0)
+        message = if (on) "Спутник" else "Схема"
+    }
+
+    /** Наклон камеры для 3D-вида домов. */
+    fun toggleTilt() {
+        if (cameraTilt > 10f) {
+            renderer.setTilt(0.0)
+        } else {
+            if (!settings.buildings3d) updateSettings { it.copy(buildings3d = true) }
+            renderer.setTilt(55.0)
+            val z = renderer.zoom() ?: 0.0
+            if (z < 15.5) renderer.center()?.let { renderer.moveTo(it.lat, it.lon, 16.5, null, 55.0, 700) }
+        }
+    }
+
+    override fun onCameraMove(bearing: Float, tilt: Float) {
         cameraBearing = bearing
+        cameraTilt = tilt
     }
 
     override fun onCameraIdle() {

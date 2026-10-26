@@ -185,7 +185,7 @@ fun GButton(
     }
 }
 
-enum class Glyph { MENU, SEARCH, LOCATE, RADAR, MAP, NORTH, ROUTE, CLOSE, BACK }
+enum class Glyph { MENU, SEARCH, LOCATE, RADAR, MAP, NORTH, ROUTE, CLOSE, BACK, SATELLITE, CUBE }
 
 @Composable
 fun GlyphIcon(glyph: Glyph, color: Color, modifier: Modifier = Modifier) {
@@ -242,6 +242,23 @@ fun GlyphIcon(glyph: Glyph, color: Color, modifier: Modifier = Modifier) {
             }
             Glyph.CLOSE -> {
                 line(0.2f, 0.2f, 0.8f, 0.8f); line(0.8f, 0.2f, 0.2f, 0.8f)
+            }
+            Glyph.SATELLITE -> {
+                // спутник: корпус и две панели
+                drawRect(color, Offset(w * 0.38f, h * 0.38f), androidx.compose.ui.geometry.Size(w * 0.24f, h * 0.24f))
+                drawRect(color, Offset(w * 0.04f, h * 0.42f), androidx.compose.ui.geometry.Size(w * 0.26f, h * 0.16f), style = stroke)
+                drawRect(color, Offset(w * 0.70f, h * 0.42f), androidx.compose.ui.geometry.Size(w * 0.26f, h * 0.16f), style = stroke)
+                line(0.30f, 0.5f, 0.38f, 0.5f); line(0.62f, 0.5f, 0.70f, 0.5f)
+                line(0.5f, 0.62f, 0.5f, 0.78f)
+                drawCircle(color, w * 0.06f, Offset(w * 0.5f, h * 0.84f))
+            }
+            Glyph.CUBE -> {
+                val p = Path().apply {
+                    moveTo(w * 0.5f, h * 0.1f); lineTo(w * 0.88f, h * 0.3f); lineTo(w * 0.88f, h * 0.72f)
+                    lineTo(w * 0.5f, h * 0.92f); lineTo(w * 0.12f, h * 0.72f); lineTo(w * 0.12f, h * 0.3f); close()
+                }
+                drawPath(p, color, style = stroke)
+                line(0.12f, 0.3f, 0.5f, 0.5f); line(0.88f, 0.3f, 0.5f, 0.5f); line(0.5f, 0.5f, 0.5f, 0.92f)
             }
             Glyph.BACK -> {
                 line(0.62f, 0.15f, 0.28f, 0.5f); line(0.28f, 0.5f, 0.62f, 0.85f)

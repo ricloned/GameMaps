@@ -27,7 +27,7 @@ class MapRenderer(ctx: Context) {
         fun onTap(lat: Double, lon: Double, hit: MapHit?)
         fun onLongPress(lat: Double, lon: Double)
         fun onCameraIdle()
-        fun onCameraMove(bearing: Float)
+        fun onCameraMove(bearing: Float, tilt: Float)
         fun onUserGesture()
     }
 
@@ -66,7 +66,7 @@ class MapRenderer(ctx: Context) {
             true
         }
         m.addOnCameraIdleListener { listener?.onCameraIdle() }
-        m.addOnCameraMoveListener { listener?.onCameraMove(m.cameraPosition.bearing.toFloat()) }
+        m.addOnCameraMoveListener { listener?.onCameraMove(m.cameraPosition.bearing.toFloat(), m.cameraPosition.tilt.toFloat()) }
         m.addOnCameraMoveStartedListener { reason ->
             if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) listener?.onUserGesture()
         }
@@ -131,7 +131,7 @@ class MapRenderer(ctx: Context) {
         styleJson = json
         style = null
         if (imagesFor != g.id) {
-            images = MarkerIcons.all(app, g, density)
+            images = MarkerIcons.all(app, g, density) + Textures.generate(g, density)
             imagesFor = g.id
         }
         val imgs = images
@@ -169,6 +169,11 @@ class MapRenderer(ctx: Context) {
             .build()
         if (ms <= 0) m.moveCamera(CameraUpdateFactory.newCameraPosition(pos))
         else m.easeCamera(CameraUpdateFactory.newCameraPosition(pos), ms)
+    }
+
+    fun setTilt(t: Double) {
+        val c = center() ?: return
+        moveTo(c.lat, c.lon, null, null, t, 600)
     }
 
     fun resetNorth() {

@@ -162,7 +162,9 @@ data class Settings(
     val showBars: Boolean = true,
     val trail: Boolean = true,
     val effects: Boolean = true,
-    val gameHud: Boolean = true
+    val gameHud: Boolean = true,
+    val textures: Boolean = true,
+    val satellite: Boolean = false
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("styleId", styleId).put("labels", labels).put("labelLang", labelLang)
@@ -172,7 +174,7 @@ data class Settings(
         .put("profile", profile.name).put("headingUp", headingUp).put("tilt3d", tilt3d)
         .put("keepScreenOn", keepScreenOn).put("showClock", showClock)
         .put("showZone", showZone).put("showBars", showBars)
-        .put("trail", trail).put("effects", effects).put("gameHud", gameHud)
+        .put("trail", trail).put("effects", effects).put("gameHud", gameHud).put("textures", textures).put("satellite", satellite)
 
     companion object {
         fun fromJson(o: JSONObject): Settings {
@@ -197,7 +199,9 @@ data class Settings(
                 showBars = o.optBoolean("showBars", d.showBars),
                 trail = o.optBoolean("trail", d.trail),
                 effects = o.optBoolean("effects", d.effects),
-                gameHud = o.optBoolean("gameHud", d.gameHud)
+                gameHud = o.optBoolean("gameHud", d.gameHud),
+                textures = o.optBoolean("textures", d.textures),
+                satellite = o.optBoolean("satellite", d.satellite)
             )
         }
     }

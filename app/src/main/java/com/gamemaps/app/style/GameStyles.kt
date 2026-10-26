@@ -7,6 +7,9 @@ enum class BlipShape { CIRCLE, SQUARE, DIAMOND, HEX, PIXEL }
 enum class PlayerShape { ARROW, TRIANGLE, CHEVRON, PIXEL }
 enum class DestShape { PIN, X, FLAG, DIAMOND }
 
+/** Набор текстур карты (см. map/Textures.kt). */
+enum class TexPack { NONE, BLOCKS, GRAIN, POCKET, PAPER, BLUEPRINT, PIP, CYBER, CHROME, SYNTH, TACTICAL, MATRIX, VICE, CARBON, VAPOR }
+
 enum class StyleGroup(val title: String) {
     GTA("GTA"), GAMES("Игры"), THEMES("Тематические"), SECRET("Секретные")
 }
@@ -91,7 +94,9 @@ data class GameStyle(
     val destShape: DestShape = DestShape.PIN,
     val playerShape: PlayerShape = PlayerShape.ARROW,
     val radarTilt: Boolean = true,
-    val hidden: Boolean = false
+    val hidden: Boolean = false,
+    val texture: TexPack = TexPack.NONE,
+    val blockBuildings: Boolean = false
 )
 
 private fun c(v: Long): Int = v.toInt()
@@ -119,7 +124,7 @@ object GameStyles {
         uiAccent = c(0xFFE1B84C), uiOnAccent = c(0xFF000000),
         uiFont = UiFont.CONDENSED, uiItalic = false, uiCorner = 0, uiSpacing = 0.03f,
         ring = c(0xFF000000), ringWidth = 12f, barA = c(0xFFB4191D), barB = c(0xFFE1E1E1),
-        uiFontRes = R.font.oswald, titleFontRes = R.font.bangers, hud = HudKind.SA,
+        uiFontRes = R.font.oswald, titleFontRes = R.font.bangers, hud = HudKind.SA, texture = TexPack.GRAIN,
         zoneColor = c(0xFF9FB8E0), moneyColor = c(0xFF36682C),
         passTitle = "MISSION PASSED!", passSub = "RESPECT +", passColor = c(0xFFE1A33A),
         wastedColor = c(0xFFB4191D), playerShape = PlayerShape.TRIANGLE, radarTilt = false
@@ -144,7 +149,7 @@ object GameStyles {
         uiAccent = c(0xFF3E8DD8), uiOnAccent = c(0xFFFFFFFF),
         uiFont = UiFont.SANS, uiItalic = false, uiCorner = 0, uiSpacing = 0.04f,
         ring = c(0xCC000000), ringWidth = 6f, barA = c(0xFF56A85A), barB = c(0xFF4C9BD6),
-        titleFontRes = R.font.bangers, hud = HudKind.V,
+        titleFontRes = R.font.bangers, hud = HudKind.V, texture = TexPack.GRAIN,
         moneyColor = c(0xFF72C472), passTitle = "MISSION PASSED", passSub = "", passColor = c(0xFFF0C850)
     )
 
@@ -167,7 +172,7 @@ object GameStyles {
         uiAccent = c(0xFFFF4FA3), uiOnAccent = c(0xFF12081F),
         uiFont = UiFont.SANS, uiItalic = true, uiCorner = 6, uiSpacing = 0.06f,
         ring = c(0xFF39E8FF), ringWidth = 5f, barA = c(0xFFFF4FA3), barB = c(0xFF39E8FF),
-        uiFontRes = R.font.exo2_italic, titleFontRes = R.font.pacifico, hud = HudKind.VICE,
+        uiFontRes = R.font.exo2_italic, titleFontRes = R.font.pacifico, hud = HudKind.VICE, texture = TexPack.VICE,
         fx = setOf(Fx.SCANLINES), zoneColor = c(0xFFFF4FA3), moneyColor = c(0xFF39E8FF),
         passTitle = "Mission Passed", passSub = "RESPECT +", passColor = c(0xFFFF4FA3),
         trailColor = c(0x88FF4FA3)
@@ -194,7 +199,7 @@ object GameStyles {
         uiAccent = c(0xFF8B1E1E), uiOnAccent = c(0xFFF3E9D2),
         uiFont = UiFont.SERIF, uiItalic = false, uiCorner = 2, uiSpacing = 0.02f,
         ring = c(0xFF3A2614), ringWidth = 8f, barA = c(0xFF8B1E1E), barB = c(0xFF3A2614),
-        uiFontRes = R.font.kelly_slab, titleFontRes = R.font.rye, hud = HudKind.WEST,
+        uiFontRes = R.font.kelly_slab, titleFontRes = R.font.rye, hud = HudKind.WEST, texture = TexPack.PAPER,
         fx = setOf(Fx.PAPER, Fx.VIGNETTE), zoneColor = c(0xFF3A2614), moneyColor = c(0xFF3A2614),
         passTitle = "MISSION COMPLETE", passSub = "HONOR +", passColor = c(0xFF8B1E1E),
         wastedTitle = "DEAD", wastedColor = c(0xFF8B1E1E),
@@ -221,7 +226,7 @@ object GameStyles {
         uiAccent = c(0xFF1FD1FF), uiOnAccent = c(0xFF000000),
         uiFont = UiFont.MONO, uiItalic = false, uiCorner = 0, uiSpacing = 0.06f,
         ring = c(0xFF1FD1FF), ringWidth = 3f, barA = c(0xFF1FD1FF), barB = c(0xFFFFC21F),
-        uiFontRes = R.font.jura, titleFontRes = R.font.rubik_glitch, hud = HudKind.HACKER,
+        uiFontRes = R.font.jura, titleFontRes = R.font.rubik_glitch, hud = HudKind.HACKER, texture = TexPack.CYBER,
         fx = setOf(Fx.GLITCH, Fx.SWEEP), zoneColor = c(0xFF1FD1FF), moneyColor = c(0xFF1FD1FF),
         passTitle = "HACK COMPLETE", passSub = "ДОСТУП ПОЛУЧЕН", passColor = c(0xFF1FD1FF),
         wastedTitle = "SIGNAL LOST", destShape = DestShape.DIAMOND
@@ -246,7 +251,7 @@ object GameStyles {
         uiAccent = c(0xFFFCEE0A), uiOnAccent = c(0xFF000000),
         uiFont = UiFont.SANS, uiItalic = false, uiCorner = 0, uiSpacing = 0.05f,
         ring = c(0xFFFCEE0A), ringWidth = 3f, barA = c(0xFFFF003C), barB = c(0xFF00F0FF),
-        uiFontRes = R.font.exo2, titleFontRes = R.font.tektur, hud = HudKind.CRED,
+        uiFontRes = R.font.exo2, titleFontRes = R.font.tektur, hud = HudKind.CRED, texture = TexPack.CHROME,
         fx = setOf(Fx.GLITCH, Fx.SCANLINES), zoneColor = c(0xFFFCEE0A), moneyColor = c(0xFFFCEE0A), moneyPrefix = "€$ ",
         passTitle = "GIG COMPLETE", passSub = "STREET CRED +", passColor = c(0xFFFCEE0A),
         wastedTitle = "FLATLINED", wastedColor = c(0xFFFF003C), destShape = DestShape.DIAMOND
@@ -271,7 +276,7 @@ object GameStyles {
         uiAccent = c(0xFF66FF99), uiOnAccent = c(0xFF021004),
         uiFont = UiFont.MONO, uiItalic = false, uiCorner = 0, uiSpacing = 0.05f,
         ring = c(0xFF66FF99), ringWidth = 3f, barA = c(0xFF66FF99), barB = c(0xFF66FF99),
-        uiFontRes = R.font.jura, titleFontRes = R.font.vt323, hud = HudKind.PIP,
+        uiFontRes = R.font.jura, titleFontRes = R.font.vt323, hud = HudKind.PIP, texture = TexPack.PIP,
         fx = setOf(Fx.SCANLINES, Fx.FLICKER, Fx.TINT), zoneColor = c(0xFF66FF99), moneyColor = c(0xFF66FF99), moneyPrefix = "CAPS ",
         passTitle = "QUEST COMPLETED", passSub = "XP +", passColor = c(0xFF66FF99),
         wastedTitle = "YOU DIED", wastedColor = c(0xFF66FF99), trailColor = c(0x8866FF99)
@@ -296,11 +301,11 @@ object GameStyles {
         uiAccent = c(0xFF55FF55), uiOnAccent = c(0xFF1E1E1E),
         uiFont = UiFont.MONO, uiItalic = false, uiCorner = 0, uiSpacing = 0.02f,
         ring = c(0xFF3C3C3C), ringWidth = 10f, barA = c(0xFFFF3B3B), barB = c(0xFF80FF20),
-        uiFontRes = R.font.pixelify, titleFontRes = R.font.press_start, hud = HudKind.BLOCK,
+        uiFontRes = R.font.pixelify, titleFontRes = R.font.press_start, hud = HudKind.BLOCK, texture = TexPack.BLOCKS, blockBuildings = true,
         fx = setOf(Fx.DAY_NIGHT), zoneColor = c(0xFFFFFF55), moneyColor = c(0xFF55FF55), moneyPrefix = "◆ ",
         passTitle = "ADVANCEMENT MADE!", passSub = "XP +", passColor = c(0xFFFFFF55),
         wastedTitle = "YOU DIED!", wastedColor = c(0xFFFF3B3B),
-        playerShape = PlayerShape.PIXEL, radarTilt = false
+        playerShape = PlayerShape.PIXEL, radarTilt = true
     )
 
     val POCKET = GameStyle(
@@ -322,7 +327,7 @@ object GameStyles {
         uiAccent = c(0xFF0F380F), uiOnAccent = c(0xFF9BBC0F),
         uiFont = UiFont.MONO, uiItalic = false, uiCorner = 0, uiSpacing = 0.0f,
         ring = c(0xFF0F380F), ringWidth = 6f, barA = c(0xFF0F380F), barB = c(0xFF306230),
-        uiFontRes = R.font.press_start, titleFontRes = R.font.press_start, hud = HudKind.POCKET,
+        uiFontRes = R.font.press_start, titleFontRes = R.font.press_start, hud = HudKind.POCKET, texture = TexPack.POCKET,
         fx = setOf(Fx.LCD), zoneColor = c(0xFF0F380F), moneyColor = c(0xFF0F380F), moneyPrefix = "₽",
         passTitle = "QUEST CLEAR!", passSub = "", passColor = c(0xFF0F380F),
         wastedTitle = "GAME OVER", wastedColor = c(0xFF0F380F),
@@ -348,7 +353,7 @@ object GameStyles {
         uiAccent = c(0xFFF2C230), uiOnAccent = c(0xFF000000),
         uiFont = UiFont.SANS, uiItalic = true, uiCorner = 4, uiSpacing = 0.03f,
         ring = c(0xFFF2C230), ringWidth = 4f, barA = c(0xFFE53935), barB = c(0xFFF2C230),
-        uiFontRes = R.font.russo_one, titleFontRes = R.font.russo_one, hud = HudKind.RACER,
+        uiFontRes = R.font.russo_one, titleFontRes = R.font.russo_one, hud = HudKind.RACER, texture = TexPack.CARBON,
         fx = setOf(Fx.VIGNETTE), zoneColor = c(0xFFF2C230), moneyColor = c(0xFFF2C230),
         passTitle = "RACE WON", passSub = "BOUNTY +", passColor = c(0xFFF2C230),
         wastedTitle = "BUSTED", wastedColor = c(0xFFE53935),
@@ -374,7 +379,7 @@ object GameStyles {
         uiAccent = c(0xFFF2E14C), uiOnAccent = c(0xFF000000),
         uiFont = UiFont.CONDENSED, uiItalic = false, uiCorner = 0, uiSpacing = 0.08f,
         ring = c(0xFF15170F), ringWidth = 6f, barA = c(0xFFE53935), barB = c(0xFFF2E14C),
-        uiFontRes = R.font.russo_one, titleFontRes = R.font.black_ops, hud = HudKind.TACTICAL,
+        uiFontRes = R.font.russo_one, titleFontRes = R.font.black_ops, hud = HudKind.TACTICAL, texture = TexPack.TACTICAL,
         fx = setOf(Fx.SWEEP, Fx.VIGNETTE), zoneColor = c(0xFFF2E14C), moneyColor = c(0xFFF2E14C),
         passTitle = "MISSION COMPLETE", passSub = "+XP", passColor = c(0xFFF2E14C),
         wastedTitle = "KIA", wastedColor = c(0xFFE53935),
@@ -402,7 +407,7 @@ object GameStyles {
         uiAccent = c(0xFFFF2E97), uiOnAccent = c(0xFF0D0221),
         uiFont = UiFont.SANS, uiItalic = true, uiCorner = 0, uiSpacing = 0.08f,
         ring = c(0xFFFF2E97), ringWidth = 4f, barA = c(0xFFFF2E97), barB = c(0xFF2DE2E6),
-        uiFontRes = R.font.exo2_italic, titleFontRes = R.font.orbitron, hud = HudKind.SYNTH,
+        uiFontRes = R.font.exo2_italic, titleFontRes = R.font.orbitron, hud = HudKind.SYNTH, texture = TexPack.SYNTH,
         fx = setOf(Fx.SYNTH, Fx.SCANLINES), zoneColor = c(0xFF2DE2E6), moneyColor = c(0xFFF9C80E), moneyPrefix = "SCORE ",
         passTitle = "LEVEL COMPLETE", passSub = "BONUS +", passColor = c(0xFF2DE2E6),
         wastedTitle = "GAME OVER", wastedColor = c(0xFFFF2E97),
@@ -428,7 +433,7 @@ object GameStyles {
         uiAccent = c(0xFF00FF41), uiOnAccent = c(0xFF000000),
         uiFont = UiFont.MONO, uiItalic = false, uiCorner = 0, uiSpacing = 0.04f,
         ring = c(0xFF00FF41), ringWidth = 2f, barA = c(0xFF00FF41), barB = c(0xFF00FF41),
-        titleFontRes = R.font.rubik_glitch, hud = HudKind.MATRIX,
+        titleFontRes = R.font.rubik_glitch, hud = HudKind.MATRIX, texture = TexPack.MATRIX,
         fx = setOf(Fx.CODE_RAIN, Fx.GLITCH), zoneColor = c(0xFF00FF41), moneyColor = c(0xFF00FF41),
         passTitle = "SYSTEM OVERRIDE", passSub = "", passColor = c(0xFF00FF41),
         wastedTitle = "CONNECTION LOST", wastedColor = c(0xFF00FF41), destShape = DestShape.DIAMOND
@@ -453,7 +458,7 @@ object GameStyles {
         uiAccent = c(0xFFB22222), uiOnAccent = c(0xFFF0E0B8),
         uiFont = UiFont.SERIF, uiItalic = false, uiCorner = 2, uiSpacing = 0.02f,
         ring = c(0xFF4A2E14), ringWidth = 8f, barA = c(0xFFB22222), barB = c(0xFF4A2E14),
-        uiFontRes = R.font.underdog, titleFontRes = R.font.pirata_one, hud = HudKind.TREASURE,
+        uiFontRes = R.font.underdog, titleFontRes = R.font.pirata_one, hud = HudKind.TREASURE, texture = TexPack.PAPER,
         fx = setOf(Fx.PAPER, Fx.VIGNETTE), zoneColor = c(0xFF4A2E14), moneyColor = c(0xFF8A6A10), moneyPrefix = "☠ ",
         passTitle = "TREASURE FOUND!", passSub = "ДОБЫЧА +", passColor = c(0xFFB22222),
         wastedTitle = "SHIPWRECKED", wastedColor = c(0xFFB22222),
@@ -480,7 +485,7 @@ object GameStyles {
         uiAccent = c(0xFFFFDD55), uiOnAccent = c(0xFF0F3B7A),
         uiFont = UiFont.SANS, uiItalic = false, uiCorner = 0, uiSpacing = 0.02f,
         ring = c(0xFFFFFFFF), ringWidth = 2f, barA = c(0xFFFFDD55), barB = c(0xFFFFFFFF),
-        uiFontRes = R.font.caveat, titleFontRes = R.font.caveat, hud = HudKind.BLUEPRINT,
+        uiFontRes = R.font.caveat, titleFontRes = R.font.caveat, hud = HudKind.BLUEPRINT, texture = TexPack.BLUEPRINT,
         fx = setOf(Fx.GRID_PAPER), zoneColor = c(0xFFFFFFFF), moneyColor = c(0xFFFFDD55),
         passTitle = "ПРОЕКТ СДАН!", passSub = "Премия +", passColor = c(0xFFFFDD55),
         wastedTitle = "ОШИБКА В ЧЕРТЕЖЕ", wastedColor = c(0xFFFFDD55),
@@ -508,7 +513,7 @@ object GameStyles {
         uiAccent = c(0xFFFF71CE), uiOnAccent = c(0xFFFFFFFF),
         uiFont = UiFont.SANS, uiItalic = true, uiCorner = 10, uiSpacing = 0.12f,
         ring = c(0xFFFF71CE), ringWidth = 5f, barA = c(0xFFFF71CE), barB = c(0xFF01CDFE),
-        uiFontRes = R.font.exo2_italic, titleFontRes = R.font.pacifico, hud = HudKind.SYNTH,
+        uiFontRes = R.font.exo2_italic, titleFontRes = R.font.pacifico, hud = HudKind.SYNTH, texture = TexPack.VAPOR,
         fx = setOf(Fx.SCANLINES), zoneColor = c(0xFFB967FF), moneyColor = c(0xFFB967FF), moneyPrefix = "¥ ",
         passTitle = "Aesthetic", passSub = "VIBES +", passColor = c(0xFFFF71CE),
         trailColor = c(0xFFFF71CE), hidden = true

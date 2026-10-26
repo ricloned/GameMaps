@@ -32,7 +32,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalDensity
+import com.gamemaps.app.map.Textures
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -128,10 +135,19 @@ private fun StyleTab(vm: AppViewModel) {
         item { SectionTitle("Вид карты") }
         item {
             GPanel(Modifier.fillMaxWidth()) {
+                GText("Подложка", size = 13.sp, upper = false)
+                Spacer(Modifier.height(6.dp))
+                GSegment(listOf("Схема", "Спутник"), if (s.satellite) 1 else 0) { i ->
+                    if ((i == 1) != s.satellite) vm.toggleSatellite()
+                }
+                Spacer(Modifier.height(6.dp))
                 GToggle("Подписи улиц и районов", s.labels) { v -> vm.updateSettings { it.copy(labels = v) } }
                 GToggle("Здания", s.buildings) { v -> vm.updateSettings { it.copy(buildings = v) } }
                 GToggle("3D-здания", s.buildings3d, "объёмные дома, красиво с наклоном") { v ->
                     vm.updateSettings { it.copy(buildings3d = v) }
+                }
+                GToggle("Текстуры стиля", s.textures, "трава из пикселей, бумага, штриховка, сетка — как в игре") { v ->
+                    vm.updateSettings { it.copy(textures = v) }
                 }
                 Spacer(Modifier.height(6.dp))
                 GText("Язык подписей", size = 13.sp, upper = false)
@@ -179,19 +195,31 @@ private fun StyleCard(st: GameStyle, selected: Boolean, onClick: () -> Unit) {
 /** Мини-превью карты в цветах стиля. */
 @Composable
 private fun StylePreview(st: GameStyle, modifier: Modifier) {
+    val density = LocalDensity.current.density
+    val brushes = remember(st.id, density) {
+        Textures.generate(st, density * 0.6f).mapValues { (_, b) ->
+            ShaderBrush(ImageShader(b.asImageBitmap(), TileMode.Repeated, TileMode.Repeated)) as Brush
+        }
+    }
     Canvas(modifier) {
         val w = size.width
         val h = size.height
-        drawRect(Color(st.land))
-        drawRect(Color(st.landUrban), Offset(w * 0.04f, h * 0.06f), Size(w * 0.44f, h * 0.38f))
-        drawRect(Color(st.park), Offset(w * 0.6f, h * 0.08f), Size(w * 0.3f, h * 0.26f))
-        for (i in 0..3) drawRect(Color(st.building), Offset(w * (0.08f + i * 0.1f), h * 0.12f), Size(w * 0.07f, h * 0.1f))
+        fun area(slot: String, color: Int, tl: Offset, sz: Size) {
+            val br = brushes["tex_$slot"]
+            if (br != null) drawRect(br, tl, sz) else drawRect(Color(color), tl, sz)
+        }
+        area("land", st.land, Offset.Zero, size)
+        area("urban", st.landUrban, Offset(w * 0.04f, h * 0.06f), Size(w * 0.44f, h * 0.38f))
+        area("park", st.park, Offset(w * 0.6f, h * 0.08f), Size(w * 0.18f, h * 0.26f))
+        area("wood", st.wood, Offset(w * 0.78f, h * 0.08f), Size(w * 0.18f, h * 0.26f))
+        for (i in 0..3) area("building", st.building, Offset(w * (0.08f + i * 0.1f), h * 0.12f), Size(w * 0.07f, h * 0.1f))
         val water = Path().apply {
             moveTo(0f, h * 0.74f)
             cubicTo(w * 0.3f, h * 0.62f, w * 0.6f, h * 0.92f, w, h * 0.72f)
             lineTo(w, h); lineTo(0f, h); close()
         }
-        drawPath(water, Color(st.water))
+        val wb = brushes["tex_water"]
+        if (wb != null) drawPath(water, wb) else drawPath(water, Color(st.water))
         st.roadCasing?.let { drawLine(Color(it), Offset(0f, h * 0.56f), Offset(w, h * 0.38f), h * 0.12f) }
         drawLine(Color(st.roadHighway), Offset(0f, h * 0.56f), Offset(w, h * 0.38f), h * 0.08f)
         drawLine(Color(st.roadMajor), Offset(w * 0.52f, 0f), Offset(w * 0.47f, h * 0.76f), h * 0.05f)

@@ -82,10 +82,10 @@ fun BoxScope.Hud(vm: AppViewModel, onRequestPermission: () -> Unit) {
         // ---- кнопки справа (в режиме карты) ----
         if (!radar) {
             Column(
-                Modifier.align(Alignment.CenterEnd).offset(y = 40.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                Modifier.align(Alignment.CenterEnd).offset(y = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                HudButtons(vm, onRequestPermission)
+                HudButtons(vm, onRequestPermission, 48.dp)
             }
         }
 
@@ -101,7 +101,7 @@ fun BoxScope.Hud(vm: AppViewModel, onRequestPermission: () -> Unit) {
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    HudButtons(vm, onRequestPermission)
+                    HudButtons(vm, onRequestPermission, 42.dp)
                 }
             }
             val sel = vm.selected
@@ -115,7 +115,8 @@ fun BoxScope.Hud(vm: AppViewModel, onRequestPermission: () -> Unit) {
             }
             if (!radar) {
                 GText(
-                    "© OpenStreetMap · OpenFreeMap",
+                    if (vm.settings.satellite) "© OpenStreetMap · OpenFreeMap · Esri, Maxar, Earthstar Geographics"
+                    else "© OpenStreetMap · OpenFreeMap",
                     size = 9.sp,
                     color = Color(g.uiDim),
                     weight = FontWeight.Normal,
@@ -129,21 +130,24 @@ fun BoxScope.Hud(vm: AppViewModel, onRequestPermission: () -> Unit) {
 }
 
 @Composable
-private fun HudButtons(vm: AppViewModel, onRequestPermission: () -> Unit) {
+private fun HudButtons(vm: AppViewModel, onRequestPermission: () -> Unit, size: androidx.compose.ui.unit.Dp) {
     val radar = vm.viewMode == ViewMode.RADAR
-    HudButton(Glyph.MENU, { vm.openMenu() })
-    HudButton(if (radar) Glyph.MAP else Glyph.RADAR, { vm.toggleMode() })
+    HudButton(Glyph.MENU, { vm.openMenu() }, size = size)
+    HudButton(if (radar) Glyph.MAP else Glyph.RADAR, { vm.toggleMode() }, size = size)
+    HudButton(Glyph.SATELLITE, { vm.toggleSatellite() }, active = vm.settings.satellite, size = size)
+    if (!radar) HudButton(Glyph.CUBE, { vm.toggleTilt() }, active = vm.cameraTilt > 10f, size = size)
     HudButton(
         Glyph.LOCATE,
         { if (vm.hasPermission) vm.locate() else onRequestPermission() },
-        active = vm.following && vm.location != null
+        active = vm.following && vm.location != null,
+        size = size
     )
     val b = vm.cameraBearing
     val rotated = b > 1f && b < 359f
     val autoRotating = vm.following && vm.settings.headingUp
-    if (rotated && !autoRotating) HudButton(Glyph.NORTH, { vm.resetNorth() }, rotation = -b)
-    HudButton(Glyph.SEARCH, { vm.openSearch() })
-    HudButton(Glyph.ROUTE, { if (vm.editing) vm.closeEditor() else vm.startEditor() }, active = vm.editing)
+    if (rotated && !autoRotating) HudButton(Glyph.NORTH, { vm.resetNorth() }, rotation = -b, size = size)
+    if (radar) HudButton(Glyph.SEARCH, { vm.openSearch() }, size = size)
+    HudButton(Glyph.ROUTE, { if (vm.editing) vm.closeEditor() else vm.startEditor() }, active = vm.editing, size = size)
 }
 
 @Composable
