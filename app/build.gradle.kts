@@ -16,6 +16,10 @@ android {
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
         versionCode = 100 + run
         versionName = "1.$run"
+        // Репозиторий, из релизов которого приложение само обновляется
+        val repo = System.getenv("GITHUB_REPOSITORY") ?: "ricloned/GameMaps"
+        buildConfigField("String", "GH_REPO", "\"$repo\"")
+        buildConfigField("int", "BUILD_RUN", "$run")
     }
 
     // Постоянный ключ подписи: без него каждая сборка подписывалась бы новым ключом
@@ -48,6 +52,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"

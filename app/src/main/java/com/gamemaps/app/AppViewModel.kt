@@ -33,6 +33,8 @@ import com.gamemaps.app.net.Api
 import com.gamemaps.app.style.GameStyle
 import com.gamemaps.app.style.GameStyles
 import com.gamemaps.app.style.HudKind
+import com.gamemaps.app.update.Release
+import com.gamemaps.app.update.Updater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,6 +54,8 @@ data class NavState(
     val remainingTime: Double = route.duration,
     val startedAt: Long = SystemClock.elapsedRealtime()
 )
+
+enum class UpdateState { IDLE, CHECKING, AVAILABLE, DOWNLOADING, READY, NONE, ERROR }
 
 enum class BannerKind { PASS, WASTED, ACHIEVEMENT, ENCOUNTER }
 
@@ -151,10 +155,67 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
     private val seenNames = HashSet<String>()
     private var lastGpsLostBanner = 0L
 
+    // --- автообновление из GitHub Releases ---
+    var update by mutableStateOf<Release?>(null)
+        private set
+    var updateState by mutableStateOf(UpdateState.IDLE)
+        private set
+    var updateProgress by mutableFloatStateOf(0f)
+        private set
+    private var updateFile: java.io.File? = null
+
     init {
         renderer.listener = this
         savedRoutes.addAll(storage.loadRoutes())
         viewModelScope.launch { gameTicker() }
+        checkUpdate(silent = true)
+    }
+
+    fun checkUpdate(silent: Boolean = false) {
+        if (updateState == UpdateState.CHECKING || updateState == UpdateState.DOWNLOADING) return
+        viewModelScope.launch {
+            updateState = UpdateState.CHECKING
+            try {
+                val r = withContext(Dispatchers.IO) { Updater.latest() }
+                if (r != null && Updater.isNewer(r)) {
+                    update = r
+                    updateState = UpdateState.AVAILABLE
+                } else {
+                    updateState = UpdateState.NONE
+                    if (!silent) message = "Установлена последняя версия"
+                }
+            } catch (e: Exception) {
+                updateState = if (silent) UpdateState.IDLE else UpdateState.ERROR
+                if (!silent) message = "Не удалось проверить: ${e.message}"
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        val r = update ?: return
+        val ctx = getApplication<Application>()
+        viewModelScope.launch {
+            updateState = UpdateState.DOWNLOADING
+            updateProgress = 0f
+            try {
+                val f = withContext(Dispatchers.IO) { Updater.download(ctx, r) { p -> updateProgress = p } }
+                updateFile = f
+                updateState = UpdateState.READY
+                installUpdate()
+            } catch (e: Exception) {
+                updateState = UpdateState.AVAILABLE
+                message = "Ошибка загрузки: ${e.message}"
+            }
+        }
+    }
+
+    fun installUpdate() {
+        val f = updateFile ?: return
+        if (!Updater.install(getApplication(), f)) message = "Разреши установку из GameMaps и нажми «Установить» ещё раз"
+    }
+
+    fun dismissUpdate() {
+        updateState = UpdateState.IDLE
     }
 
     val canGoBack: Boolean

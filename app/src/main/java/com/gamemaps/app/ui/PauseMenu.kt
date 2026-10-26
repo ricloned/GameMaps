@@ -371,6 +371,37 @@ private fun SettingsTab(vm: AppViewModel) {
                 GButton("Стереть след", { vm.clearTrail() }, Modifier.fillMaxWidth())
             }
         }
+        item { SectionTitle("Обновления") }
+        item {
+            GPanel(Modifier.fillMaxWidth()) {
+                GText("Версия 1.${com.gamemaps.app.update.Updater.currentRun}", size = 14.sp, upper = false)
+                val status = when (vm.updateState) {
+                    com.gamemaps.app.UpdateState.CHECKING -> "Проверяю…"
+                    com.gamemaps.app.UpdateState.AVAILABLE -> "Есть ${vm.update?.name ?: "новая версия"}"
+                    com.gamemaps.app.UpdateState.DOWNLOADING -> "Загрузка…"
+                    com.gamemaps.app.UpdateState.READY -> "Готово к установке"
+                    com.gamemaps.app.UpdateState.NONE -> "Последняя версия"
+                    else -> "Обновления берутся из релизов ${com.gamemaps.app.update.Updater.repo}"
+                }
+                GText(status, size = 12.sp, color = Color(g.uiDim), weight = FontWeight.Normal, upper = false)
+                Spacer(Modifier.height(8.dp))
+                GButton(
+                    when (vm.updateState) {
+                        com.gamemaps.app.UpdateState.AVAILABLE -> "Скачать и установить"
+                        com.gamemaps.app.UpdateState.READY -> "Установить"
+                        else -> "Проверить обновления"
+                    },
+                    {
+                        when (vm.updateState) {
+                            com.gamemaps.app.UpdateState.AVAILABLE -> vm.downloadUpdate()
+                            com.gamemaps.app.UpdateState.READY -> vm.installUpdate()
+                            else -> vm.checkUpdate()
+                        }
+                    },
+                    Modifier.fillMaxWidth(), primary = vm.updateState == com.gamemaps.app.UpdateState.AVAILABLE
+                )
+            }
+        }
         item { SectionTitle("О приложении") }
         item {
             GPanel(Modifier.fillMaxWidth()) {

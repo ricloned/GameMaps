@@ -77,6 +77,7 @@ fun BoxScope.Hud(vm: AppViewModel, onRequestPermission: () -> Unit) {
                 GText("Загрузка…", size = 11.sp, color = Color(g.uiDim), shadow = true)
             }
             vm.message?.let { MessageBox(it) }
+            UpdateBanner(vm)
         }
 
         // ---- кнопки справа (в режиме карты) ----
@@ -267,6 +268,29 @@ private fun RoutePreview(vm: AppViewModel, route: RouteResult) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GButton("Поехали", { vm.startNavigation() }, Modifier.weight(1f), primary = true)
             GButton("Сброс", { vm.stopRoute() }, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun UpdateBanner(vm: AppViewModel) {
+    val g = LocalGame.current
+    val st = vm.updateState
+    if (st != com.gamemaps.app.UpdateState.AVAILABLE && st != com.gamemaps.app.UpdateState.DOWNLOADING &&
+        st != com.gamemaps.app.UpdateState.READY) return
+    val r = vm.update ?: return
+    GPanel(Modifier.fillMaxWidth()) {
+        GText("Доступно обновление: ${r.name}", size = 14.sp, color = Color(g.uiAccent), upper = false)
+        Spacer(Modifier.height(8.dp))
+        when (st) {
+            com.gamemaps.app.UpdateState.DOWNLOADING ->
+                GText("Загрузка… ${(vm.updateProgress * 100).roundToInt()}%", size = 13.sp, upper = false)
+            com.gamemaps.app.UpdateState.READY ->
+                GButton("Установить", { vm.installUpdate() }, Modifier.fillMaxWidth(), primary = true)
+            else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GButton("Позже", { vm.dismissUpdate() }, Modifier.weight(1f))
+                GButton("Обновить", { vm.downloadUpdate() }, Modifier.weight(1f), primary = true)
+            }
         }
     }
 }
