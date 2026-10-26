@@ -26,6 +26,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +59,7 @@ import com.gamemaps.app.style.StyleGroup
 import com.gamemaps.app.model.Achievements
 import java.util.Locale
 
-private val TABS = listOf("Стиль", "Места", "Маршруты", "Статистика", "Настройки")
+private val TABS = listOf("Стиль", "Места", "Маршруты", "Офлайн", "Статистика", "Настройки")
 
 /** Меню «паузы» в духе игр: вкладки сверху, всё настраивается на лету. */
 @Composable
@@ -94,7 +97,8 @@ fun PauseMenu(vm: AppViewModel) {
                     0 -> StyleTab(vm)
                     1 -> PlacesTab(vm)
                     2 -> RoutesTab(vm)
-                    3 -> StatsTab(vm)
+                    3 -> OfflineTab(vm)
+                    4 -> StatsTab(vm)
                     else -> SettingsTab(vm)
                 }
             }
@@ -468,5 +472,79 @@ private fun StatRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
         GText(label, size = 13.sp, color = Color(g.uiDim), upper = false, weight = FontWeight.Normal, modifier = Modifier.weight(1f))
         GText(value, size = 13.sp, upper = false)
+    }
+}
+
+// ---------------- Офлайн ----------------
+
+@Composable
+private fun OfflineTab(vm: AppViewModel) {
+    val g = LocalGame.current
+    var city by remember { mutableStateOf("") }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            GPanel(Modifier.fillMaxWidth()) {
+                GText("Скачать город", size = 15.sp, color = Color(g.uiAccent))
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    Modifier.fillMaxWidth().border(1.dp, Color(g.uiAccent).copy(alpha = 0.6f)).padding(12.dp)
+                ) {
+                    if (city.isEmpty()) GText("Например: Москва, Казань, Сочи", size = 14.sp, color = Color(g.uiDim), upper = false, weight = FontWeight.Normal)
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = city,
+                        onValueChange = { city = it },
+                        singleLine = true,
+                        textStyle = gameTextStyle(15.sp, FontWeight.Normal).copy(color = Color(g.uiText)),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(g.uiAccent)),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                GButton(if (vm.offlineBusy) "Ищу город…" else "Скачать", { vm.downloadCity(city) }, Modifier.fillMaxWidth(),
+                    primary = true, enabled = !vm.offlineBusy && city.isNotBlank())
+                Spacer(Modifier.height(6.dp))
+                GButton("Скачать то, что видно на экране", { vm.downloadVisible() }, Modifier.fillMaxWidth())
+            }
+        }
+        item {
+            GText(
+                "Скачиваются улицы, дома, подписи, магазины и популярные места — для всех стилей сразу. " +
+                    "Без интернета будут работать карта, GPS, радар и значки мест. Поиск, маршруты и спутник требуют интернет. " +
+                    "Большой город занимает примерно 50–300 МБ.",
+                size = 11.sp, color = Color(g.uiDim), weight = FontWeight.Normal, upper = false
+            )
+        }
+        item { SectionTitle("Скачанные") }
+        if (vm.offlineAreas.isEmpty()) {
+            item { GText("Пока ничего не скачано", size = 14.sp, upper = false) }
+        }
+        items(vm.offlineAreas, key = { it.id }) { a ->
+            GPanel(Modifier.fillMaxWidth()) {
+                GText(a.name, size = 16.sp, upper = false)
+                val mb = a.bytes / (1024.0 * 1024.0)
+                val status = when {
+                    a.error != null -> "Ошибка: ${a.error}"
+                    a.complete -> "Готово · ${String.format(Locale.US, "%.0f", mb)} МБ"
+                    a.active -> "Загрузка ${(a.progress * 100).toInt()}% · ${String.format(Locale.US, "%.0f", mb)} МБ"
+                    else -> "Пауза ${(a.progress * 100).toInt()}%"
+                }
+                GText(status, size = 12.sp, color = Color(g.uiDim), weight = FontWeight.Normal, upper = false)
+                if (!a.complete) {
+                    Spacer(Modifier.height(6.dp))
+                    Box(Modifier.fillMaxWidth().height(6.dp).background(Color(g.uiDim).copy(alpha = 0.3f))) {
+                        Box(Modifier.fillMaxWidth(a.progress).height(6.dp).background(Color(g.uiAccent)))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (!a.complete) {
+                        if (a.active) GButton("Пауза", { vm.pauseOffline(a.id) }, Modifier.weight(1f))
+                        else GButton("Продолжить", { vm.resumeOffline(a.id) }, Modifier.weight(1f), primary = true)
+                    }
+                    GButton("Удалить", { vm.deleteOffline(a.id) }, Modifier.weight(1f))
+                }
+            }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }

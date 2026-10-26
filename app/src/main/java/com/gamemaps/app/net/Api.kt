@@ -90,6 +90,31 @@ object Api {
         return out
     }
 
+    /** Границы города по названию (для офлайн-загрузки): имя и Box. */
+    fun cityBox(q: String): Pair<String, Box>? {
+        val url = "https://photon.komoot.io/api/?limit=8&q=" + enc(q)
+        val arr = JSONObject(http(url)).optJSONArray("features") ?: return null
+        var fallback: Pair<String, Box>? = null
+        for (i in 0 until arr.length()) {
+            val ft = arr.getJSONObject(i)
+            val p = ft.getJSONObject("properties")
+            val name = p.optString("name").ifBlank { q }
+            val ext = p.optJSONArray("extent")
+            val isPlace = p.optString("osm_key") == "place" || p.optString("osm_value") in setOf("city", "town", "administrative")
+            if (ext != null && ext.length() == 4) {
+                // extent: [minLon, maxLat, maxLon, minLat]
+                val box = Box(ext.getDouble(3), ext.getDouble(0), ext.getDouble(1), ext.getDouble(2))
+                if (isPlace) return name to box
+                if (fallback == null) fallback = name to box
+            } else if (fallback == null) {
+                val c = ft.getJSONObject("geometry").getJSONArray("coordinates")
+                val lat = c.getDouble(1); val lon = c.getDouble(0)
+                fallback = name to Box(lat - 0.12, lon - 0.2, lat + 0.12, lon + 0.2)
+            }
+        }
+        return fallback
+    }
+
     fun reverse(lat: Double, lon: Double): ReverseInfo? {
         val root = JSONObject(http("https://photon.komoot.io/reverse?lat=${f(lat)}&lon=${f(lon)}&limit=1"))
         val arr = root.optJSONArray("features") ?: return null

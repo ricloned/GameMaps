@@ -155,6 +155,50 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
     private val seenNames = HashSet<String>()
     private var lastGpsLostBanner = 0L
 
+    // --- офлайн-карты ---
+    var offlineAreas by mutableStateOf<List<com.gamemaps.app.map.OfflineArea>>(emptyList())
+        private set
+    var offlineBusy by mutableStateOf(false)
+        private set
+    private val offline = com.gamemaps.app.map.Offline(app) { list -> offlineAreas = list }
+
+    /** Скачать город по названию. */
+    fun downloadCity(q: String) {
+        if (q.isBlank()) return
+        viewModelScope.launch {
+            offlineBusy = true
+            try {
+                val res = withContext(Dispatchers.IO) { Api.cityBox(q.trim()) }
+                if (res == null) message = "Город «$q» не найден"
+                else {
+                    val (name, box) = res
+                    offline.download(name, box, getApplication<Application>().resources.displayMetrics.density) { e ->
+                        message = "Не удалось начать загрузку: $e"
+                    }
+                    message = "Загружаю «$name» для офлайна"
+                }
+            } catch (e: Exception) {
+                message = "Нужен интернет, чтобы найти город: ${e.message}"
+            } finally {
+                offlineBusy = false
+            }
+        }
+    }
+
+    /** Скачать то, что сейчас видно на экране (с запасом). */
+    fun downloadVisible() {
+        val (box, _) = renderer.viewport() ?: return
+        val name = zoneName?.let { "Район: $it" } ?: "Область ${java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale("ru")).format(java.util.Date())}"
+        offline.download(name, box.expand(0.15), getApplication<Application>().resources.displayMetrics.density) { e ->
+            message = "Не удалось начать загрузку: $e"
+        }
+        message = "Загружаю видимую область"
+    }
+
+    fun pauseOffline(id: Long) = offline.pause(id)
+    fun resumeOffline(id: Long) = offline.resume(id)
+    fun deleteOffline(id: Long) = offline.delete(id)
+
     // --- автообновление из GitHub Releases ---
     var update by mutableStateOf<Release?>(null)
         private set
