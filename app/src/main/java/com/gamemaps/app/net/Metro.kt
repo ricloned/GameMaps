@@ -64,7 +64,7 @@ object Metro {
             val key = if (name.isNotBlank()) "$line|$name" else "$line|#$nodeId"
             return stIdx.getOrPut(key) {
                 st += St(name.ifBlank { "станция" }, p, line)
-                adj += ArrayList()
+                adj.add(ArrayList())
                 st.lastIndex
             }
         }
