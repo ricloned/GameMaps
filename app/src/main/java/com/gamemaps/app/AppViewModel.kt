@@ -116,6 +116,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
     var activeRoute by mutableStateOf<RouteResult?>(null)
         private set
     private var activeTargets: List<GeoPoint> = emptyList()
+    private var activeOrigin: GeoPoint? = null
+    /** Варианты пути (от быстрого к медленному) и какой выбран. */
+    var routeOptions by mutableStateOf<List<RouteResult>>(emptyList())
+        private set
+    var routeChoice by mutableIntStateOf(0)
+        private set
     var nav by mutableStateOf<NavState?>(null)
         private set
     var routeLoading by mutableStateOf(false)
@@ -870,8 +876,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         routeJob = viewModelScope.launch {
             routeLoading = true
             try {
-                val r = withContext(Dispatchers.IO) { Api.route(settings.profile, targets) }
+                val list = withContext(Dispatchers.IO) { Api.routes(settings.profile, targets) }
+                val r = list.first()
+                // при перестройке в пути варианты не показываем — сразу лучший
+                routeOptions = if (startNav) emptyList() else list
+                routeChoice = 0
                 activeRoute = r
+                activeOrigin = targets.first()
                 activeTargets = targets.drop(1)
                 renderRoute()
                 renderDest()
@@ -886,10 +897,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         }
     }
 
+    /** Выбрать один из вариантов пути. */
+    fun chooseRoute(i: Int) {
+        val r = routeOptions.getOrNull(i) ?: return
+        routeChoice = i
+        activeRoute = r
+        renderRoute()
+    }
+
+    /** Сменить способ передвижения у показанного маршрута и пересчитать варианты. */
+    fun changeRouteMode(p: Profile) {
+        updateSettings { it.copy(profile = p) }
+        val from = myPoint() ?: activeOrigin ?: return
+        if (activeTargets.isEmpty()) return
+        buildRoute(listOf(from) + activeTargets, fit = true, startNav = false)
+    }
+
     fun startNavigation() {
         val r = activeRoute ?: return
         val prev = nav
         nav = NavState(r, activeTargets, startedAt = prev?.startedAt ?: SystemClock.elapsedRealtime())
+        renderRoute()
         offCount = 0
         selected = null
         setFollow(true)
@@ -901,6 +929,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
         routeJob?.cancel()
         activeRoute = null
         activeTargets = emptyList()
+        routeOptions = emptyList()
+        routeChoice = 0
         nav = null
         renderRoute()
         renderDest()
@@ -928,7 +958,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
 
     private fun renderRoute() {
         val r = activeRoute
-        renderer.set("route", if (r == null) GeoJson.EMPTY else GeoJson.fc(listOf(GeoJson.line(r.points))))
+        renderer.set("route", when {
+            r == null -> GeoJson.EMPTY
+            r.segments.isEmpty() -> GeoJson.fc(listOf(GeoJson.line(r.points)))
+            else -> GeoJson.fc(r.segments.filter { it.points.size >= 2 }.map { seg ->
+                val p = HashMap<String, Any>()
+                p["walk"] = seg.walk
+                seg.color?.let { p["color"] = com.gamemaps.app.style.MapStyleJson.css(it) }
+                GeoJson.line(seg.points, p)
+            })
+        })
+        // остальные варианты — серыми линиями под выбранным
+        val alts = if (nav == null) routeOptions.filter { it !== r } else emptyList()
+        renderer.set("routealt", if (alts.isEmpty()) GeoJson.EMPTY else GeoJson.fc(alts.map { GeoJson.line(it.points) }))
     }
 
     private fun updateNav(l: Location) {
@@ -944,7 +986,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), MapRenderer.Listen
 
         val r = n.route
         val snap = Geo.snap(me, r.points, r.cumulative)
-        if (snap.distance > 60) {
+        if (snap.distance > 60 && r.profile != Profile.METRO) {
             offCount++
             if (offCount >= 3 && !routeLoading) {
                 offCount = 0

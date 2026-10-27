@@ -341,12 +341,26 @@ object MapStyleJson {
             if (g.trailDashed) trailPaint.put("line-dasharray", a(0.6, 1.6))
             layers.put(layer("trail", "line", source = "trail", paint = trailPaint, layout = lineLayout()))
         }
-        layers.put(layer("route-casing", "line", source = "route",
+        // другие варианты пути — серые, под основным
+        layers.put(layer("route-alt-casing", "line", source = "routealt",
+            paint = o("line-color" to css(g.routeCasing), "line-opacity" to 0.6, "line-width" to zoomLin(10, 6, 18, 13)),
+            layout = lineLayout()))
+        layers.put(layer("route-alt", "line", source = "routealt",
+            paint = o("line-color" to "#9A9A9A", "line-opacity" to 0.85, "line-width" to zoomLin(10, 3, 18, 8)),
+            layout = lineLayout()))
+        val notWalk = a("!=", a("get", "walk"), true)
+        val isWalk = a("==", a("get", "walk"), true)
+        layers.put(layer("route-casing", "line", source = "route", filter = notWalk,
             paint = o("line-color" to css(g.routeCasing), "line-width" to zoomLin(10, 7, 18, 16)),
             layout = lineLayout()))
-        layers.put(layer("route-line", "line", source = "route",
-            paint = o("line-color" to css(g.route), "line-width" to zoomLin(10, 4, 18, 10)),
+        // поездки на метро красятся в цвет линии (свойство color), остальное — цвет маршрута стиля
+        layers.put(layer("route-line", "line", source = "route", filter = notWalk,
+            paint = o("line-color" to a("coalesce", a("get", "color"), css(g.route)), "line-width" to zoomLin(10, 4, 18, 10)),
             layout = lineLayout()))
+        // пешие куски маршрута на метро — пунктиром
+        layers.put(layer("route-walk", "line", source = "route", filter = isWalk,
+            paint = o("line-color" to css(g.route), "line-width" to zoomLin(10, 3, 18, 7), "line-dasharray" to a(0.4, 1.6)),
+            layout = o("line-cap" to "round", "line-join" to "round")))
         layers.put(layer("draft-line", "line", source = "draft",
             filter = a("==", a("geometry-type"), "LineString"),
             paint = o("line-color" to css(g.waypoint), "line-width" to 5, "line-dasharray" to a(1.4, 0.9)),
@@ -416,7 +430,7 @@ object MapStyleJson {
                 "attribution" to "Esri, Maxar, Earthstar Geographics"
             ))
         }
-        for (id in listOf("route", "draft", "dest", "pois", "player", "trail")) {
+        for (id in listOf("route", "routealt", "draft", "dest", "pois", "player", "trail")) {
             sources.put(id, o("type" to "geojson", "data" to JSONObject(EMPTY_FC)))
         }
 

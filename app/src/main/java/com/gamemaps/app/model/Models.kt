@@ -20,7 +20,9 @@ enum class ViewMode { MAP, RADAR }
 enum class Profile(val title: String, val server: String) {
     CAR("Авто", "routed-car"),
     BIKE("Вело", "routed-bike"),
-    FOOT("Пешком", "routed-foot")
+    FOOT("Пешком", "routed-foot"),
+    /** Метро + пешком до станций; пешие куски строит routed-foot. */
+    METRO("Метро", "routed-foot")
 }
 
 /** Категории мест. glyph — значок-«блип» как на радаре в играх. */
@@ -103,13 +105,29 @@ data class RouteStep(
     val pointIndex: Int
 )
 
+/** Кусок маршрута для отрисовки: пешком (пунктир) или поездка по линии метро своего цвета. */
+data class RouteSeg(
+    val points: List<GeoPoint>,
+    val walk: Boolean,
+    val color: Int? = null,
+    /** Для поездки: название линии. */
+    val line: String = "",
+    /** Для поездки: сколько перегонов. */
+    val stops: Int = 0,
+    val duration: Double = 0.0
+)
+
 data class RouteResult(
     val points: List<GeoPoint>,
     val cumulative: DoubleArray,
     val distance: Double,
     val duration: Double,
     val steps: List<RouteStep>,
-    val profile: Profile
+    val profile: Profile,
+    /** Пусто — обычный маршрут одной линией. */
+    val segments: List<RouteSeg> = emptyList(),
+    /** Короткое описание варианта: улицы или линии метро. */
+    val summary: String = ""
 )
 
 data class RoutePoint(val lat: Double, val lon: Double, val label: String) {

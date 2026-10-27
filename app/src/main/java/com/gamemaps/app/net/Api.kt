@@ -259,20 +259,37 @@ object Api {
 
     // ---------- Маршруты (OSRM) ----------
 
-    fun route(profile: Profile, pts: List<GeoPoint>): RouteResult {
+    /** Один маршрут (для своих маршрутов с несколькими точками). */
+    fun route(profile: Profile, pts: List<GeoPoint>): RouteResult = routes(profile, pts).first()
+
+    /**
+     * Несколько вариантов пути, от быстрого к медленному.
+     * Для двух точек OSRM отдаёт альтернативы; метро считается отдельно.
+     */
+    fun routes(profile: Profile, pts: List<GeoPoint>): List<RouteResult> {
         require(pts.size >= 2) { "нужно минимум 2 точки" }
+        if (profile == Profile.METRO) {
+            if (pts.size == 2) return Metro.routes(pts[0], pts[1])
+            return routes(Profile.FOOT, pts) // метро — только от точки до точки
+        }
         val coords = pts.joinToString(";") { "${f(it.lon)},${f(it.lat)}" }
+        val alt = if (pts.size == 2) "&alternatives=3" else ""
         val url = "https://routing.openstreetmap.de/${profile.server}/route/v1/driving/$coords" +
-                "?overview=full&geometries=geojson&steps=true"
+                "?overview=full&geometries=geojson&steps=true$alt"
         val root = JSONObject(http(url))
         if (root.optString("code") != "Ok") throw IOException(root.optString("message", "маршрут не найден"))
-        val r = root.getJSONArray("routes").getJSONObject(0)
+        val arr = root.getJSONArray("routes")
+        return (0 until arr.length()).map { parseRoute(arr.getJSONObject(it), profile) }.sortedBy { it.duration }
+    }
+
+    private fun parseRoute(r: JSONObject, profile: Profile): RouteResult {
         val ca = r.getJSONObject("geometry").getJSONArray("coordinates")
         val points = (0 until ca.length()).map {
             val c = ca.getJSONArray(it)
             GeoPoint(c.getDouble(1), c.getDouble(0))
         }
         val steps = ArrayList<RouteStep>()
+        val names = LinkedHashMap<String, Double>()
         var from = 0
         val legs = r.getJSONArray("legs")
         for (li in 0 until legs.length()) {
@@ -280,6 +297,8 @@ object Api {
             val lastLeg = li == legs.length() - 1
             for (si in 0 until st.length()) {
                 val s = st.getJSONObject(si)
+                val name = s.optString("name")
+                if (name.isNotBlank()) names[name] = (names[name] ?: 0.0) + s.optDouble("distance", 0.0)
                 val m = s.getJSONObject("maneuver")
                 val type = m.optString("type")
                 if (type == "depart" && li > 0) continue
@@ -289,13 +308,31 @@ object Api {
                 val idx = Geo.nearestVertex(gp, points, from)
                 from = idx
                 steps += RouteStep(
-                    text = Instructions.text(type, mod, s.optString("name"), m.optInt("exit", 0), lastLeg),
+                    text = Instructions.text(type, mod, name, m.optInt("exit", 0), lastLeg),
                     arrow = Instructions.arrow(type, mod),
                     location = gp,
                     pointIndex = idx
                 )
             }
         }
-        return RouteResult(points, Geo.cumulative(points), r.optDouble("distance", 0.0), r.optDouble("duration", 0.0), steps, profile)
+        // «через …»: две самые длинные улицы варианта
+        val via = names.entries.sortedByDescending { it.value }.take(2).joinToString(", ") { it.key }
+        return RouteResult(points, Geo.cumulative(points), r.optDouble("distance", 0.0), r.optDouble("duration", 0.0), steps, profile,
+            summary = if (via.isNotBlank()) "через $via" else "")
     }
+
+    /** Пеший кусок для метро: геометрия и время; при ошибке — прямая линия. */
+    fun walk(a: GeoPoint, b: GeoPoint): Pair<List<GeoPoint>, Double> {
+        val d = Geo.dist(a, b)
+        if (d < 40) return listOf(a, b) to d / 1.3
+        return try {
+            val r = routes(Profile.FOOT, listOf(a, b)).first()
+            r.points to r.duration
+        } catch (e: Exception) {
+            listOf(a, b) to d * 1.25 / 1.3
+        }
+    }
+
+    /** Overpass для модуля метро. */
+    fun overpassRaw(q: String): String = overpass(q)
 }

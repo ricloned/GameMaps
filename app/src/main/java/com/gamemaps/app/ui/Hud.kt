@@ -262,8 +262,58 @@ private fun NavBottom(vm: AppViewModel, nav: NavState) {
 private fun RoutePreview(vm: AppViewModel, route: RouteResult) {
     val g = LocalGame.current
     GPanel(Modifier.fillMaxWidth()) {
-        GText("Маршрут · ${route.profile.title}", size = 13.sp, color = Color(g.uiAccent))
-        GText("${Geo.fmtDist(route.distance)} · ${Geo.fmtDur(route.duration)}", size = 22.sp, upper = false)
+        // способ передвижения: смена сразу пересчитывает варианты
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            com.gamemaps.app.model.Profile.entries.forEach { p ->
+                GButton(p.title, { if (p != vm.settings.profile) vm.changeRouteMode(p) }, Modifier.weight(1f),
+                    primary = p == vm.settings.profile, enabled = !vm.routeLoading)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        val opts = vm.routeOptions.ifEmpty { listOf(route) }
+        if (vm.routeLoading) {
+            GText("Считаю варианты…", size = 13.sp, color = Color(g.uiDim), weight = FontWeight.Normal, upper = false)
+            Spacer(Modifier.height(6.dp))
+        }
+        val fastest = opts.minOf { it.duration }
+        val slowest = opts.maxOf { it.duration }
+        opts.forEachIndexed { i, r ->
+            val sel = i == vm.routeChoice
+            val shape = RoundedCornerShape(g.uiCorner.dp)
+            Column(
+                Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(shape)
+                    .background(if (sel) Color(g.uiAccent).copy(alpha = 0.16f) else Color(g.uiText).copy(alpha = 0.05f))
+                    .border(if (sel) 2.dp else 1.dp, Color(g.uiAccent).copy(alpha = if (sel) 1f else 0.3f), shape)
+                    .clickable { vm.chooseRoute(i) }
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GText("${Geo.fmtDur(r.duration)} · ${Geo.fmtDist(r.distance)}", size = 18.sp, upper = false, modifier = Modifier.weight(1f))
+                    val diff = ((r.duration - fastest) / 60).roundToInt()
+                    val (tag, col) = when {
+                        opts.size > 1 && r.duration == fastest -> "Быстрый" to Color(0xFF4CD964)
+                        opts.size > 2 && r.duration == slowest -> "Медленный · +$diff мин" to Color(0xFFFF6B5E)
+                        diff > 0 -> "+$diff мин" to Color(0xFFFFC145)
+                        else -> "" to Color(g.uiDim)
+                    }
+                    if (tag.isNotEmpty()) GText(tag, size = 12.sp, color = col)
+                }
+                if (r.segments.any { !it.walk }) {
+                    // цепочка: пешком → линия → линия → пешком
+                    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        r.segments.forEachIndexed { k, seg ->
+                            if (k > 0) GText(" › ", size = 12.sp, color = Color(g.uiDim), upper = false)
+                            if (seg.walk) GText("🚶${(seg.duration / 60).roundToInt().coerceAtLeast(1)}", size = 12.sp, color = Color(g.uiDim), upper = false)
+                            else Box(
+                                Modifier.clip(RoundedCornerShape(50)).background(Color(seg.color ?: g.route))
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) { GText("M ${seg.stops}", size = 11.sp, color = Color.White, upper = false) }
+                        }
+                    }
+                }
+                if (r.summary.isNotBlank()) GText(r.summary, size = 12.sp, color = Color(g.uiDim), weight = FontWeight.Normal, upper = false, maxLines = 2)
+            }
+        }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GButton("Поехали", { vm.startNavigation() }, Modifier.weight(1f), primary = true)
